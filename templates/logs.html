@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs - SSH Tunnel Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
+    <style>
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        body { display: flex; flex-direction: column; }
+        .log-container {
+            flex-grow: 1;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: scroll;
+            background-color: var(--bs-dark);
+            color: var(--bs-light);
+            padding: 1rem;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .log-line-ERROR { color: #f87171; }
+        .log-line-WARNING { color: #facc15; }
+        .log-line-INFO { color: #4ade80; }
+        .navbar {
+            backdrop-filter: blur(10px);
+            background-color: rgba(var(--bs-dark-rgb), 0.85);
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/"><i class="bi bi-arrow-left-circle-fill"></i> 返回主页</a>
+        <h5 class="navbar-text text-white mb-0">实时日志中心</h5>
+        <div>
+            <button id="clear-log-btn" class="btn btn-sm btn-danger me-2">清空日志</button>
+            <div class="form-check form-switch d-inline-block">
+                <input class="form-check-input" type="checkbox" role="switch" id="theme-toggle">
+                <label class="form-check-label text-light" for="theme-toggle"><i class="bi bi-sun-fill"></i>/<i class="bi bi-moon-stars-fill"></i></label>
+            </div>
+        </div>
+    </div>
+</nav>
+<div id="log-content" class="log-container"></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const logContent = document.getElementById('log-content');
+
+        // --- WebSocket with Reconnection ---
+        const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
+
+        const addLogLine = (message, level) => {
+            const logLine = document.createElement('div');
+            logLine.className = `log-line-${level}`;
+            logLine.textContent = message;
+            logContent.appendChild(logLine);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        socket.on('connect', () => {
+            addLogLine('成功连接到日志服务器...', 'INFO');
+        });
+        socket.on('disconnect', () => {
+            addLogLine('与服务器断开连接，正在尝试重连...', 'ERROR');
+        });
+        socket.on('log_message', (msg) => {
+            const logLevel = msg.data.split('|')[1].trim();
+            addLogLine(msg.data, logLevel);
+        });
+
+        // --- Theme ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const storedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-bs-theme', storedTheme);
+        themeToggle.checked = storedTheme === 'light';
+
+        themeToggle.addEventListener('change', function() {
+            const theme = this.checked ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', theme);
+            localStorage.setItem('theme', theme);
+        });
+
+        // --- Clear Button ---
+        document.getElementById('clear-log-btn').addEventListener('click', () => {
+            logContent.innerHTML = '';
+        });
+    });
+</script>
+</body>
+</html>
+

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Tunnel Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sweetalert2.min.css') }}">
+    <style>
+        :root {
+            --glow-color: rgb(0, 123, 255);
+            --glow-color-red: rgb(220, 53, 69);
+        }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .navbar {
+            backdrop-filter: blur(10px);
+            background-color: rgba(var(--bs-dark-rgb), 0.85);
+        }
+        .server-card {
+            margin-bottom: 1.5rem; border-width: 1px;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .server-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 0 20px var(--glow-color);
+        }
+        .server-card.disabled {
+            opacity: 0.6; background-color: var(--bs-secondary-bg);
+            box-shadow: none; transform: none;
+        }
+        .action-icons { display: flex; align-items: center; gap: 12px; }
+        .form-check-input { margin-top: 0; }
+        .footer { padding: 2rem 0; margin-top: 2rem; border-top: 1px solid var(--bs-border-color); }
+        .bi { vertical-align: -0.125em; }
+        .tunnel-row { transition: background-color 0.2s; }
+        .tunnel-row:hover { background-color: var(--bs-tertiary-bg); }
+        .control-panel { display: flex; align-items: center; gap: 0.5rem; }
+        .control-panel .btn-group .btn { border-radius: 0.5rem; transition: all 0.2s ease; }
+        .control-panel .btn-group .btn:hover { transform: scale(1.05); box-shadow: 0 0 15px rgba(var(--bs-primary-rgb), 0.5); }
+        .control-panel .form-switch { padding: 0.375rem 0.75rem; border: 1px solid var(--bs-border-color); border-radius: 0.5rem; background-color: var(--bs-tertiary-bg); }
+        .navbar-nav .nav-item { margin-bottom: .5rem; }
+
+        .copy-address .bi-clipboard { opacity: 0.5; transition: opacity 0.2s; }
+        .copy-address:hover .bi-clipboard { opacity: 1; }
+
+        @media (min-width: 992px) {
+            .navbar-nav .nav-item { margin-bottom: 0; }
+            .navbar-collapse .d-flex.flex-grow-1 { max-width: 500px; }
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+    <div class="container-fluid">
+        <a class="navbar-brand"><i class="bi bi-shield-lock-fill"></i> SSH Tunnel Manager</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+            <form class="d-flex flex-grow-1 my-2 my-lg-0 mx-auto" role="search">
+                <input class="form-control" type="search" placeholder="搜索服务器组、隧道备注、端口..." id="search-box">
+            </form>
+            <ul class="navbar-nav ms-auto align-items-center flex-row flex-wrap justify-content-center">
+                <li class="nav-item mx-1">
+                    <a href="/logs" class="btn btn-secondary" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
+                </li>
+                <li class="nav-item mx-1">
+                    <button id="add-server-btn" class="btn btn-success"><i class="bi bi-plus-circle"></i> 新增</button>
+                </li>
+                <li class="nav-item mx-1">
+                    <div class="control-panel">
+                        <div class="btn-group">
+                            <button class="btn btn-outline-primary" id="enable-all-btn" title="一键启用所有"><i class="bi bi-play-fill"></i></button>
+                            <button class="btn btn-outline-warning ms-2" id="disable-all-btn" title="一键禁用所有"><i class="bi bi-stop-fill"></i></button>
+                        </div>
+                    </div>
+                </li>
+                <li class="nav-item ms-lg-3">
+                    <div class="form-check form-switch d-flex align-items-center" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                        <input class="form-check-input" type="checkbox" role="switch" id="theme-toggle" style="margin-left: -2.5em; height: 1.5em; width: 3em;">
+                        <label class="form-check-label text-light" for="theme-toggle" style="margin-left: 0.5rem;"><i class="bi bi-sun-fill"></i>/<i class="bi bi-moon-stars-fill"></i></label>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <div id="server-list">
+        {% for group in server_groups %}
+        <div class="card server-card {% if not group.enabled %}disabled{% endif %}" id="server-{{ group.id }}" data-search-text="{{ group.name }} {{ group.ssh_connection.ssh_server_host }} {{ group.ssh_connection.ssh_username }}">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                <h5 class="mb-0 me-3">
+                    <i class="bi bi-server"></i> {{ group.name }}
+                    <small class="text-muted">({{ group.ssh_connection.ssh_username }}@{{ group.ssh_connection.ssh_server_host }}:{{ group.ssh_connection.ssh_server_port }})</small>
+                </h5>
+                <div class="action-icons">
+                    <button class="btn btn-sm btn-info restart-server-btn" data-id="{{ group.id }}" {% if not group.enabled %}disabled{% endif %}><i class="bi bi-arrow-clockwise"></i> 重启</button>
+                    <i class="bi bi-pencil-square text-info edit-server-btn" data-id="{{ group.id }}" title="编辑服务器组" style="cursor: pointer;"></i>
+                    <i class="bi bi-plus-square text-success add-tunnel-btn" data-id="{{ group.id }}" title="新增隧道" style="cursor: pointer;"></i>
+                    <div class="form-check form-switch d-flex align-items-center">
+                        <input class="form-check-input server-toggle" style="font-size: 1.5em; margin-left: -2em; cursor: pointer;" type="checkbox" role="switch" data-id="{{ group.id }}" {% if group.enabled %}checked{% endif %}>
+                    </div>
+                    <i class="bi bi-trash text-danger delete-server-btn" data-id="{{ group.id }}" title="删除服务器组" style="cursor: pointer;"></i>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for forward in group.forwards %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-{{ group.id }}-{{ forward.id }}" data-search-text="{{ forward.comment }} {{ forward.local_port }} {{ forward.remote_port }}">
+                        <div>
+                            <strong>{{ forward.comment }}</strong><br>
+                            <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ forward.local_host }}:{{ forward.local_port }}">
+                                {{ forward.local_host }}:{{ forward.local_port }} <i class="bi bi-clipboard"></i>
+                            </span>
+                            <i class="bi bi-arrow-right mx-2"></i>
+                            <span class="badge bg-secondary">{{ forward.remote_host }}:{{ forward.remote_port }}</span>
+                        </div>
+                        <div class="action-icons">
+                            <i class="bi bi-pencil-square text-info edit-tunnel-btn" data-server-id="{{ group.id }}" data-id="{{ forward.id }}" title="编辑隧道" style="cursor: pointer;"></i>
+                            <div class="form-check form-switch d-flex align-items-center">
+                                <input class="form-check-input tunnel-toggle" type="checkbox" role="switch" data-server-id="{{ group.id }}" data-id="{{ forward.id }}" {% if forward.enabled %}checked{% endif %}>
+                            </div>
+                            <i class="bi bi-trash text-danger delete-tunnel-btn" data-server-id="{{ group.id }}" data-id="{{ forward.id }}" title="删除隧道" style="cursor: pointer;"></i>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<footer class="footer text-muted text-center">
+    <p>&copy; 2025 All Rights Reserved. Maintained by <a href="https://github.com/RexMignon" target="_blank"><i class="bi bi-github"></i> Mignon Rex</a>.</p>
+</footer>
+
+<script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sweetalert2.all.min.js') }}"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        // --- Notifications ---
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+        requestNotificationPermission();
+
+        const showToast = (icon, title) => {
+            Swal.fire({ toast: true, position: 'top-end', icon: icon, title: title, showConfirmButton: false, timer: 2000 });
+        };
+
+        function showNotification(type, body) {
+            const validIcons = ['success', 'error', 'warning', 'info', 'question'];
+            const icon = validIcons.includes(type.toLowerCase()) ? type.toLowerCase() : 'info';
+
+            if (Notification.permission === "granted" && document.hidden) {
+                new Notification(body, { icon: "/static/ico/favicon.ico", renotify: true, tag: 'ssh-tunnel-notify' });
+            } else if (type.toLowerCase() !== 'info') {
+                showToast(icon, body);
+            }
+        }
+
+        // --- WebSocket & Theme ---
+        const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
+
+        socket.on('connect', () => {
+            console.log('WebSocket connected!');
+        });
+
+        socket.on('disconnect', () => showNotification('warning', '连接已断开，正在尝试重连...'));
+        socket.on('notification', (data) => showNotification(data.type, data.message));
+
+        const themeToggle = $('#theme-toggle');
+        const storedTheme = localStorage.getItem('theme') || 'dark';
+        $('html').attr('data-bs-theme', storedTheme);
+        themeToggle.prop('checked', storedTheme === 'light');
+
+        themeToggle.on('change', function() {
+            const theme = this.checked ? 'light' : 'dark';
+            $('html').attr('data-bs-theme', theme);
+            localStorage.setItem('theme', theme);
+        });
+
+        // --- UI & State Management ---
+        function updateUIStates() {
+            $('.server-card').each(function() {
+                const card = $(this);
+                const serverToggle = card.find('.server-toggle');
+                const isServerEnabled = serverToggle.is(':checked');
+                card.toggleClass('disabled', !isServerEnabled);
+                card.find('.restart-server-btn, .add-tunnel-btn, .edit-tunnel-btn, .delete-tunnel-btn, .tunnel-toggle').css('pointer-events', isServerEnabled ? 'auto' : 'none');
+                card.find('.restart-server-btn, .add-tunnel-btn').prop('disabled', !isServerEnabled);
+                card.find('.tunnel-toggle').prop('disabled', !isServerEnabled);
+            });
+        }
+        updateUIStates();
+
+        // --- Search Functionality ---
+        $('#search-box').on('input', function() {
+            const searchTerm = $(this).val().toLowerCase();
+            $('.server-card').each(function() {
+                const card = $(this);
+                const serverText = card.data('search-text').toLowerCase();
+                let serverVisible = serverText.includes(searchTerm);
+                let tunnelsVisibleCount = 0;
+                card.find('.tunnel-row').each(function() {
+                    const tunnel = $(this);
+                    const tunnelText = tunnel.data('search-text').toLowerCase();
+                    const tunnelMatches = tunnelText.includes(searchTerm);
+                    tunnel.toggle(tunnelMatches);
+                    if (tunnelMatches) tunnelsVisibleCount++;
+                });
+                card.toggle(serverVisible || tunnelsVisibleCount > 0);
+            });
+        });
+
+        // --- API Call Helper ---
+        function apiCall(url, method, data, successCallback, errorCallback) {
+            $.ajax({
+                url: url, type: method, contentType: 'application/json',
+                data: data ? JSON.stringify(data) : null,
+                success: successCallback,
+                error: function(xhr) {
+                    if (errorCallback) {
+                        errorCallback(xhr);
+                    } else {
+                        const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : '请求失败!';
+                        Swal.fire({ icon: 'error', title: '操作失败', text: errorMsg });
+                    }
+                }
+            });
+        }
+
+        // --- HTML Templates ---
+        const createServerCardHTML = (group) => {
+            const disabledClass = group.enabled ? '' : 'disabled';
+            const disabledAttr = group.enabled ? '' : 'disabled';
+            return `
+                <div class="card server-card ${disabledClass}" id="server-${group.id}" data-search-text="${group.name} ${group.ssh_connection.ssh_server_host} ${group.ssh_connection.ssh_username}" style="display:none;">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                        <h5 class="mb-0 me-3">
+                            <i class="bi bi-server"></i> ${group.name}
+                            <small class="text-muted">(${group.ssh_connection.ssh_username}@${group.ssh_connection.ssh_server_host}:${group.ssh_connection.ssh_server_port})</small>
+                        </h5>
+                        <div class="action-icons">
+                            <button class="btn btn-sm btn-info restart-server-btn" data-id="${group.id}" ${disabledAttr}><i class="bi bi-arrow-clockwise"></i> 重启</button>
+                            <i class="bi bi-pencil-square text-info edit-server-btn" data-id="${group.id}" title="编辑服务器组" style="cursor: pointer;"></i>
+                            <i class="bi bi-plus-square text-success add-tunnel-btn" data-id="${group.id}" title="新增隧道" style="cursor: pointer;"></i>
+                            <div class="form-check form-switch d-flex align-items-center">
+                                <input class="form-check-input server-toggle" style="font-size: 1.5em; margin-left: -2em; cursor: pointer;" type="checkbox" role="switch" data-id="${group.id}" ${group.enabled ? 'checked' : ''}>
+                            </div>
+                            <i class="bi bi-trash text-danger delete-server-btn" data-id="${group.id}" title="删除服务器组" style="cursor: pointer;"></i>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-flush"></div>
+                    </div>
+                </div>`;
+        };
+
+        const createTunnelRowHTML = (group, forward) => {
+            return `
+                <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-${group.id}-${forward.id}" data-search-text="${forward.comment} ${forward.local_port} ${forward.remote_port}">
+                    <div>
+                        <strong>${forward.comment}</strong><br>
+                        <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="${forward.local_host}:${forward.local_port}">
+                            ${forward.local_host}:${forward.local_port} <i class="bi bi-clipboard"></i>
+                        </span>
+                        <i class="bi bi-arrow-right mx-2"></i>
+                        <span class="badge bg-secondary">${forward.remote_host}:${forward.remote_port}</span>
+                    </div>
+                    <div class="action-icons">
+                        <i class="bi bi-pencil-square text-info edit-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="编辑隧道" style="cursor: pointer;"></i>
+                        <div class="form-check form-switch d-flex align-items-center">
+                            <input class="form-check-input tunnel-toggle" type="checkbox" role="switch" data-server-id="${group.id}" data-id="${forward.id}" ${forward.enabled ? 'checked' : ''}>
+                        </div>
+                        <i class="bi bi-trash text-danger delete-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="删除隧道" style="cursor: pointer;"></i>
+                    </div>
+                </div>`;
+        };
+
+        // --- Event Handlers (Forms) ---
+        const handleServerForm = (isEdit = false, serverId = null, currentData = {}) => {
+            const performSave = (formData, isTre) => {
+                const url = isEdit ? `/api/servers/${serverId}` : '/api/servers';
+                const method = isEdit ? 'PUT' : 'POST';
+                apiCall(url, method, formData,
+                    (res) => { // Success callback for SAVE
+                        if (isTre==undefined){
+                            showToast('success', res.message);
+                        }
+                        if (isEdit) {
+                            const card = $(`#server-${serverId}`);
+                            card.find('h5').contents().filter(function() { return this.nodeType === 3; }).text(` ${res.group.name} `);
+                            card.find('small').text(`(${res.group.ssh_connection.ssh_username}@${res.group.ssh_connection.ssh_server_host}:${res.group.ssh_connection.ssh_server_port})`);
+                            card.data('search-text', `${res.group.name} ${res.group.ssh_connection.ssh_server_host} ${res.group.ssh_connection.ssh_username}`);
+                        } else {
+                            const newCard = $(createServerCardHTML(res.group));
+                            $('#server-list').append(newCard);
+                            newCard.fadeIn(300);
+                        }
+                        updateUIStates();
+                        Swal.close();
+                    },
+                    (xhr) => { // Error callback for SAVE
+                        const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : '保存失败!';
+                        $('#swal-error-message').text(errorMsg);
+                        Swal.hideLoading();
+                        if (Swal.getDenyButton()) Swal.getDenyButton().disabled = false;
+                        if (Swal.getConfirmButton()) Swal.getConfirmButton().disabled = false;
+                    }
+                );
+            };
+
+            Swal.fire({
+                title: isEdit ? '编辑服务器组' : '新增服务器组',
+                html: `
+                    <input id="swal-name" class="swal2-input" placeholder="服务器组名称" value="${currentData.name || ''}">
+                    <input id="swal-ssh-host" class="swal2-input" placeholder="SSH 主机" value="${currentData.ssh_connection?.ssh_server_host || ''}">
+                    <input id="swal-ssh-port" class="swal2-input" placeholder="SSH 端口" type="number" value="${currentData.ssh_connection?.ssh_server_port || 22}">
+                    <input id="swal-ssh-user" class="swal2-input" placeholder="SSH 用户名" value="${currentData.ssh_connection?.ssh_username || ''}">
+                    <input id="swal-ssh-pass" class="swal2-input" placeholder="${isEdit ? '留空则不修改密码' : 'SSH 密码'}" type="password" value="">
+                    <div id="swal-error-message" class="text-danger mt-2 text-start" style="min-height: 1.2em;"></div>
+                `,
+                focusConfirm: false,
+                showDenyButton: true,
+                denyButtonText: '测试并保存',
+                confirmButtonText: '直接保存',
+                denyButtonColor: '#3085d6',
+                didOpen: () => {
+                    $('#swal-error-message').text('');
+                },
+                preConfirm: () => ({
+                    name: $('#swal-name').val(), ssh_host: $('#swal-ssh-host').val(),
+                    ssh_port: $('#swal-ssh-port').val(), ssh_user: $('#swal-ssh-user').val(), ssh_pass: $('#swal-ssh-pass').val(),
+                }),
+                preDeny: () => {
+                    $('#swal-error-message').text('');
+                    const denyButton = Swal.getDenyButton();
+                    const confirmButton = Swal.getConfirmButton();
+                    denyButton.disabled = true;
+                    confirmButton.disabled = true;
+                    Swal.showLoading(denyButton);
+
+                    const formData = {
+                        name: $('#swal-name').val(), ssh_host: $('#swal-ssh-host').val(),
+                        ssh_port: $('#swal-ssh-port').val(), ssh_user: $('#swal-ssh-user').val(), ssh_pass: $('#swal-ssh-pass').val(),
+                    };
+
+                    apiCall('/api/servers/test', 'POST', formData,
+                        (res) => {
+                            performSave(formData);
+                        },
+                        (xhr) => {
+                            Swal.hideLoading();
+                            denyButton.disabled = false;
+                            confirmButton.disabled = false;
+                            const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : '测试连接失败!';
+                            $('#swal-error-message').text(errorMsg);
+                        }
+                    );
+                    return false;
+                }
+            }).then(result => {
+                if (result.isConfirmed) {
+                    const formData = {
+                        name: $('#swal-name').val(), ssh_host: $('#swal-ssh-host').val(),
+                        ssh_port: $('#swal-ssh-port').val(), ssh_user: $('#swal-ssh-user').val(), ssh_pass: $('#swal-ssh-pass').val(),
+                    };
+                    performSave(formData, true);
+                }
+            });
+        };
+
+        const handleTunnelForm = (isEdit = false, serverId, ruleId = null, currentData = {}) => {
+            Swal.fire({
+                title: isEdit ? '编辑隧道' : '新增隧道',
+                html: `
+                    <input id="swal-comment" class="swal2-input" placeholder="备注" value="${currentData.comment || ''}">
+                    <input id="swal-local-host" class="swal2-input" placeholder="本地地址" value="${currentData.local_host || '127.0.0.1'}">
+                    <input id="swal-local-port" class="swal2-input" placeholder="本地端口" type="number" value="${currentData.local_port || ''}">
+                    <input id="swal-remote-host" class="swal2-input" placeholder="远程地址" value="${currentData.remote_host || '127.0.0.1'}">
+                    <input id="swal-remote-port" class="swal2-input" placeholder="远程端口" type="number" value="${currentData.remote_port || ''}">
+                `,
+                focusConfirm: false,
+                preConfirm: () => ({
+                    server_id: serverId, comment: $('#swal-comment').val(), local_host: $('#swal-local-host').val(),
+                    local_port: $('#swal-local-port').val(), remote_host: $('#swal-remote-host').val(), remote_port: $('#swal-remote-port').val(),
+                })
+            }).then(result => {
+                if (result.isConfirmed) {
+                    const url = isEdit ? `/api/tunnels/${serverId}/${ruleId}` : '/api/tunnels';
+                    const method = isEdit ? 'PUT' : 'POST';
+                    apiCall(url, method, result.value, (res) => {
+                        showToast('success', res.message);
+                        const tunnelList = $(`#server-${serverId}`).find('.list-group');
+                        const newRow = $(createTunnelRowHTML({id: serverId}, res.rule)).hide();
+                        if (isEdit) {
+                            $(`#tunnel-${serverId}-${ruleId}`).replaceWith(newRow);
+                        } else {
+                            tunnelList.append(newRow);
+                        }
+                        newRow.fadeIn(300);
+                        updateUIStates();
+                    });
+                }
+            });
+        };
+        // --- Event Listeners (Clicks) ---
+        $('#add-server-btn').on('click', () => handleServerForm());
+        $('#server-list').on('click', '.edit-server-btn', function() {
+            const serverId = $(this).data('id');
+            apiCall(`/api/servers/${serverId}`, 'GET', null, (data) => handleServerForm(true, serverId, data.group));
+        });
+        $('#server-list').on('click', '.add-tunnel-btn', function() { handleTunnelForm(false, $(this).data('id')); });
+        $('#server-list').on('click', '.edit-tunnel-btn', function() {
+            const serverId = $(this).data('server-id'), ruleId = $(this).data('id');
+            apiCall(`/api/tunnels/${serverId}/${ruleId}`, 'GET', null, (data) => handleTunnelForm(true, serverId, ruleId, data.rule));
+        });
+        $('#server-list').on('click', '.delete-server-btn', function() {
+            const serverId = $(this).data('id');
+            Swal.fire({ title: '确认删除服务器组?', text: "此操作不可逆!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: '确认删除'
+            }).then((result) => {
+                if (result.isConfirmed) apiCall(`/api/servers/${serverId}`, 'DELETE', null, () => {
+                    $(`#server-${serverId}`).fadeOut(300, function() { $(this).remove(); });
+                    showToast('success', '服务器组已删除');
+                });
+            })
+        });
+        $('#server-list').on('click', '.delete-tunnel-btn', function() {
+            const serverId = $(this).data('server-id'), ruleId = $(this).data('id');
+            Swal.fire({ title: '确认删除此隧道?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: '确认删除'
+            }).then((result) => {
+                if (result.isConfirmed) apiCall(`/api/tunnels/${serverId}/${ruleId}`, 'DELETE', null, () => {
+                    $(`#tunnel-${serverId}-${ruleId}`).fadeOut(300, function() { $(this).remove(); });
+                    showToast('success', '隧道已删除');
+                });
+            })
+        });
+        $('#server-list').on('change', '.server-toggle', function() {
+            apiCall(`/api/servers/toggle/${$(this).data('id')}`, 'POST', null, (data) => {
+                showToast('success', `服务器组已${data.enabled ? '启用' : '禁用'}`);
+                updateUIStates();
+            });
+        });
+        $('#server-list').on('change', '.tunnel-toggle', function() {
+            const serverId = $(this).data('server-id'), ruleId = $(this).data('id');
+            apiCall(`/api/tunnels/toggle/${serverId}/${ruleId}`, 'POST', null, (data) => {
+                showToast('success', `隧道已${data.enabled ? '启用' : '禁用'}`);
+            });
+        });
+        $('#server-list').on('click', '.restart-server-btn', function() {
+            apiCall(`/api/servers/restart/${$(this).data('id')}`, 'POST', null, () => showToast('success', '重启指令已发送'));
+        });
+        $('#enable-all-btn').on('click', () => apiCall('/api/control/toggle_all/enable', 'POST', null, () => {
+            $('.server-toggle').prop('checked', true); updateUIStates(); showToast('success', '所有服务器组已启用');
+        }));
+        $('#disable-all-btn').on('click', () => apiCall('/api/control/toggle_all/disable', 'POST', null, () => {
+            $('.server-toggle').prop('checked', false); updateUIStates(); showToast('warning', '所有服务器组已禁用');
+        }));
+        $('#server-list').on('click', '.copy-address', function() {
+            const textToCopy = $(this).data('address');
+            navigator.clipboard.writeText(textToCopy).then(() => showToast('success', `已复制: ${textToCopy}`),() => showToast('error', '复制失败'));
+        });
+
+    });
+</script>
+</body>
+</html>
+
