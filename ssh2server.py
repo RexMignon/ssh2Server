@@ -15,7 +15,8 @@ from dataclasses import dataclass, field, asdict
 import json
 from collections import defaultdict
 from mignonFramework import JsonConfigManager, injectJson, Logger
-
+import paramiko
+import socket
 RECONNECT_DELAY_SECONDS = 5
 
 # --- 核心路径逻辑修改 START ---
@@ -141,7 +142,7 @@ def object_to_dict(obj):
     if isinstance(obj, dict):
         return {k: object_to_dict(v) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [object_to_dict(i) for i in i]
+        return [object_to_dict(i) for i in obj]
     return obj
 
 def generate_unique_id():
@@ -370,31 +371,54 @@ def get_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Response, 
     return jsonify({'status': 'success', 'rule': object_to_dict(rule)})
 
 @app.route('/api/servers/test', methods=['POST'])
-def test_server_connection() -> Response | tuple[Response, int]:
+def test_server_connection_with_paramiko() -> Union[Response, Tuple[Response, int]]:
+    """
+    使用 paramiko 库测试 SSH 服务器连接，并显式设置超时。
+    """
     data = request.json
+    if not data:
+        return jsonify({'status': 'error', 'message': '请求体为空'}), 400
+
     host = data.get('ssh_host')
     port = int(data.get('ssh_port', 22))
     user = data.get('ssh_user')
     password = data.get('ssh_pass')
 
     if not all([host, user, password]):
-        return jsonify({'status': 'error', 'message': '缺少连接参数'}), 400
+        return jsonify({'status': 'error', 'message': '缺少必要的连接参数 (ssh_host, ssh_user, ssh_pass)'}), 400
 
-    server = None
+    ssh_client = paramiko.SSHClient()
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
     try:
-        server = sshtunnel.SSHTunnelForwarder(
-            (host, port), ssh_username=user, ssh_password=password, set_keepalive=5.0
+        ssh_client.connect(
+            hostname=host,
+            port=port,
+            username=user,
+            password=password,
+            timeout=10,
+            look_for_keys=False,
+            allow_agent=False
         )
-        server.start()
-        server.stop()
         return jsonify({'status': 'success', 'message': 'SSH 连接成功!'})
+    except socket.timeout:
+        error_message = f'连接超时，服务器 {host}:{port} 在指定时间内没有响应。'
+        return jsonify({'status': 'error', 'message': error_message}), 400
+    except paramiko.AuthenticationException:
+        error_message = f'认证失败，请检查用户名和密码。'
+        return jsonify({'status': 'error', 'message': error_message}), 400
+    except paramiko.SSHException as e:
+        error_message = f'SSH 连接错误: {e}'
+        return jsonify({'status': 'error', 'message': error_message}), 400
     except Exception as e:
-        if server:
-            try:
-                server.stop()
-            except Exception:
-                pass
-        return jsonify({'status': 'error', 'message': f'连接失败: {e}'}), 400
+        error_message = f'发生未知错误: {e}'
+        return jsonify({'status': 'error', 'message': error_message}), 400
+    finally:
+        try:
+            ssh_client.close()
+        except Exception:
+            pass
+
 
 @app.route('/api/servers', methods=['POST'])
 def add_server() -> Response:
