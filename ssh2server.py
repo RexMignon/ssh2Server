@@ -19,7 +19,6 @@ import paramiko
 import socket
 RECONNECT_DELAY_SECONDS = 5
 
-# --- 核心路径逻辑修改 START ---
 
 def get_base_path() -> str:
     """
@@ -29,10 +28,8 @@ def get_base_path() -> str:
     我们使用其目录作为所有资源的基础路径。
     """
     if getattr(sys, 'frozen', False):
-        # 如果是打包后的可执行文件，通常 sys.executable 更可靠地指向 .exe
         return os.path.dirname(sys.executable)
 
-    # 对于 .py 脚本或未识别的打包环境，使用 sys.argv[0]
     try:
         if sys.argv[0]:
             return os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -42,7 +39,6 @@ def get_base_path() -> str:
     # 最终回退
     return os.path.abspath('.')
 
-# 使用最简单粗暴的绝对路径获取方式
 BASE_PATH_ROOT = get_base_path()
 
 # 1. 确定所有资源的根目录
@@ -62,9 +58,7 @@ app = Flask(
 )
 app.config['SECRET_KEY'] = 'mignon-rex-is-the-best'
 socketio = SocketIO(app, async_mode='gevent')
-# --- 核心路径逻辑修改 END ---
 
-# --- Bridge for UI Logging & Notifications ---
 class SocketIOHandler(logging.Handler):
     def emit(self, record):
         print(record.getMessage())

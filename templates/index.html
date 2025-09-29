@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSH Tunnel Manager</title>
+    <script>
+        // Prevent theme flash by applying the theme from localStorage immediately.
+        (function() {
+            const storedTheme = localStorage.getItem('theme') || 'dark'; // Default to dark theme
+            document.documentElement.setAttribute('data-bs-theme', storedTheme);
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sweetalert2.min.css') }}">
@@ -98,7 +105,7 @@
         <div class="card server-card {% if not group.enabled %}disabled{% endif %}" id="server-{{ group.id }}" data-search-text="{{ group.name }} {{ group.ssh_connection.ssh_server_host }} {{ group.ssh_connection.ssh_username }}">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                 <h5 class="mb-0 me-3">
-                    <i class="bi bi-server"></i> {{ group.name }}
+                    <i class="bi bi-server"></i> <span class="server-name">{{ group.name }}</span>
                     <small class="text-muted">({{ group.ssh_connection.ssh_username }}@{{ group.ssh_connection.ssh_server_host }}:{{ group.ssh_connection.ssh_server_port }})</small>
                 </h5>
                 <div class="action-icons">
@@ -184,9 +191,9 @@
         socket.on('notification', (data) => showNotification(data.type, data.message));
 
         const themeToggle = $('#theme-toggle');
-        const storedTheme = localStorage.getItem('theme') || 'dark';
-        $('html').attr('data-bs-theme', storedTheme);
-        themeToggle.prop('checked', storedTheme === 'light');
+        // Set the toggle switch state based on the theme applied by the script in <head>
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        themeToggle.prop('checked', currentTheme === 'light');
 
         themeToggle.on('change', function() {
             const theme = this.checked ? 'light' : 'dark';
@@ -252,7 +259,7 @@
                 <div class="card server-card ${disabledClass}" id="server-${group.id}" data-search-text="${group.name} ${group.ssh_connection.ssh_server_host} ${group.ssh_connection.ssh_username}" style="display:none;">
                     <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                         <h5 class="mb-0 me-3">
-                            <i class="bi bi-server"></i> ${group.name}
+                            <i class="bi bi-server"></i> <span class="server-name">${group.name}</span>
                             <small class="text-muted">(${group.ssh_connection.ssh_username}@${group.ssh_connection.ssh_server_host}:${group.ssh_connection.ssh_server_port})</small>
                         </h5>
                         <div class="action-icons">
@@ -304,7 +311,7 @@
                         }
                         if (isEdit) {
                             const card = $(`#server-${serverId}`);
-                            card.find('h5').contents().filter(function() { return this.nodeType === 3; }).text(` ${res.group.name} `);
+                            card.find('.server-name').text(res.group.name);
                             card.find('small').text(`(${res.group.ssh_connection.ssh_username}@${res.group.ssh_connection.ssh_server_host}:${res.group.ssh_connection.ssh_server_port})`);
                             card.data('search-text', `${res.group.name} ${res.group.ssh_connection.ssh_server_host} ${res.group.ssh_connection.ssh_username}`);
                         } else {
@@ -480,4 +487,3 @@
 </script>
 </body>
 </html>
-
