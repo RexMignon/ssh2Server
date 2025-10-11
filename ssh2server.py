@@ -7,7 +7,7 @@ import webbrowser
 import argparse
 import logging
 import concurrent.futures
-from typing import List, Optional, Dict, Tuple, Union
+from typing import List, Optional, Dict, Tuple, Union, Set
 from flask import Flask, render_template, request, jsonify, Response, g, send_from_directory
 from flask_socketio import SocketIO
 import sshtunnel
@@ -45,7 +45,7 @@ BASE_PATH_ROOT = get_base_path()
 BASE_DIR = BASE_PATH_ROOT.replace('\\', '/')
 # 2. 确定配置文件的路径（它应该在 resources/config 目录下）
 CONFIG_FILE_PATH = os.path.join(BASE_DIR, "resources", "config", "config.json")
-CONNECTION_POOL_SIZE = 5
+CONNECTION_POOL_SIZE = 10 # 适当增加线程池大小以应对可能的阻塞
 
 # 3. 显式指定 Flask 的模板和静态文件目录
 TEMPLATE_FOLDER = os.path.join(BASE_PATH_ROOT, 'templates')
@@ -61,14 +61,18 @@ socketio = SocketIO(app, async_mode='gevent')
 
 class SocketIOHandler(logging.Handler):
     def emit(self, record):
-        print(record.getMessage())
-        log_entry = self.format(record)
-        socketio.emit('log_message', {'data': log_entry})
-        if record.levelno >= logging.WARNING:
-            socketio.emit('notification', {
-                'type': 'warning' if record.levelno == logging.WARNING else 'error',
-                'message': record.getMessage()
-            })
+        try:
+            print(record.getMessage())
+            log_entry = self.format(record)
+            socketio.emit('log_message', {'data': log_entry})
+            if record.levelno >= logging.WARNING:
+                socketio.emit('notification', {
+                    'type': 'warning' if record.levelno == logging.WARNING else 'error',
+                    'message': record.getMessage()
+                })
+        except Exception:
+            # 在socket连接不可用时，防止日志系统崩溃
+            pass
 
 # --- Logger Setup ---
 # 确保 Logger 模块使用修改后的 BASE_DIR
@@ -116,12 +120,11 @@ class AppConfig:
     server_groups: List[ServerGroup] = field(default_factory=list)
 
 # --- Global State (Refactored for Central Monitoring) ---
-# 存储 sshtunnel 实例，而不是线程
 active_tunnels: Dict[str, sshtunnel.SSHTunnelForwarder] = {}
+tunnels_being_stopped: Set[str] = set() # BUGFIX: 新增集合来标记正在停止的隧道
 tunnel_lock = threading.Lock()
 app_config = AppConfig()
 
-# 单一监控线程和线程池
 monitor_service: Optional['TunnelMonitorService'] = None
 connection_executor: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(
     max_workers=CONNECTION_POOL_SIZE
@@ -129,9 +132,9 @@ connection_executor: concurrent.futures.ThreadPoolExecutor = concurrent.futures.
 
 # --- Helper Function ---
 def object_to_dict(obj):
-    if hasattr(obj, '_data'): # Handle framework's proxy objects first
+    if hasattr(obj, '_data'):
         return object_to_dict(obj._data)
-    if hasattr(obj, '__dataclass_fields__'): # Handle dataclass instances
+    if hasattr(obj, '__dataclass_fields__'):
         return asdict(obj)
     if isinstance(obj, dict):
         return {k: object_to_dict(v) for k, v in obj.items()}
@@ -140,15 +143,10 @@ def object_to_dict(obj):
     return obj
 
 def generate_unique_id():
-    """生成一个基于当前时间的毫秒级时间戳字符串，确保唯一性。"""
     time.sleep(0.001)
     return str(int(time.time() * 1000))
 
 def convert_forward_config(input_data: dict) -> dict:
-    """
-    将旧格式的SSH转发配置JSON转换为按服务器分组的新格式。
-    （保留此函数以兼容旧配置迁移）
-    """
     server_map = defaultdict(list)
     for forward_rule in input_data.get("forwards", []):
         ssh_conn = forward_rule.get("ssh_connection")
@@ -192,47 +190,73 @@ def attempt_connection(tunnel_id: str, server_group: ServerGroup, rule: ForwardR
     """
     阻塞式地尝试建立并启动SSH隧道。此函数在线程池中执行。
     """
-    server: Optional[sshtunnel.SSHTunnelForwarder] = None
-
-    # 1. 尝试获取或创建隧道实例
     with tunnel_lock:
-        server = active_tunnels.get(tunnel_id)
+        if tunnel_id in tunnels_being_stopped:
+            ui_logger.info(f"隧道 '{rule.comment}' 的连接尝试被中止，因为它已被标记为停止。")
+            tunnels_being_stopped.discard(tunnel_id)
+            return
 
-    # 如果实例不存在，或者是在重连时需要重新创建（为了捕获最新的配置，虽然sshtunnel允许动态配置，但安全起见）
-    # 在这个重构中，我们依赖 MonitorService 在配置变更时调用 stop_tunnel 来替换实例。
-    if server is None:
-        try:
-            conn = server_group.ssh_connection
-            server = sshtunnel.SSHTunnelForwarder(
-                (conn.ssh_server_host, conn.ssh_server_port),
-                ssh_username=conn.ssh_username,
-                ssh_password=conn.ssh_password,
-                local_bind_address=(rule.local_host, rule.local_port),
-                remote_bind_address=(rule.remote_host, rule.remote_port),
-                set_keepalive=30.0
-            )
-        except Exception as e:
-            ui_logger.error(f"隧道 '{rule.comment}' 创建实例失败: {e}")
-            return # 无法创建实例，直接返回
-
-    # 2. 尝试启动 (这是阻塞操作)
+    server: Optional[sshtunnel.SSHTunnelForwarder] = None
     try:
-        if not server.is_active:
-            ui_logger.info(f"隧道 '{rule.comment}' 正在尝试 {'(重)' if is_reconnect else ''}连接...")
-            socketio.emit('notification', {'type': 'info', 'message': f"正在连接: {rule.comment}"})
-            server.start()
+        conn = server_group.ssh_connection
+        # BUGFIX: 移除了不存在的 ssh_timeout 参数
+        server = sshtunnel.SSHTunnelForwarder(
+            (conn.ssh_server_host, conn.ssh_server_port),
+            ssh_username=conn.ssh_username,
+            ssh_password=conn.ssh_password,
+            local_bind_address=(rule.local_host, rule.local_port),
+            remote_bind_address=(rule.remote_host, rule.remote_port),
+            set_keepalive=30.0
+        )
+    except Exception as e:
+        ui_logger.error(f"隧道 '{rule.comment}' 创建实例失败: {e}")
+        return
 
-            with tunnel_lock:
-                active_tunnels[tunnel_id] = server # 确保实例被存储
+    try:
+        with tunnel_lock:
+            if tunnel_id in tunnels_being_stopped:
+                ui_logger.info(f"隧道 '{rule.comment}' 的启动被中止，因为它在实例创建后被标记为停止。")
+                tunnels_being_stopped.discard(tunnel_id)
+                return
 
-            ui_logger.info(f"隧道 '{rule.comment}' ({rule.local_host}:{rule.local_port}) 连接成功。")
+        ui_logger.info(f"隧道 '{rule.comment}' 正在尝试 {'(重)' if is_reconnect else ''}连接...")
+        socketio.emit('notification', {'type': 'info', 'message': f"正在连接: {rule.comment}"})
+        server.start()
+
+        with tunnel_lock:
+            if tunnel_id in tunnels_being_stopped:
+                ui_logger.warning(f"隧道 '{rule.comment}' 在连接成功后立即被停止。")
+                server.stop()
+                tunnels_being_stopped.discard(tunnel_id)
+                return
+            active_tunnels[tunnel_id] = server
+
+        ui_logger.info(f"隧道 '{rule.comment}' ({rule.local_host}:{rule.local_port}) 连接成功。")
 
     except Exception as e:
-        ui_logger.error(f"隧道 '{rule.comment}' 连接失败: {e}")
+        error_message = str(e)
+        if "Authentication failed" in error_message:
+            ui_logger.error(f"隧道 '{rule.comment}' 认证失败，请检查用户名和密码。")
+        elif "Could not resolve hostname" in error_message:
+            ui_logger.error(f"隧道 '{rule.comment}' 无法解析SSH主机名。")
+        else:
+            ui_logger.error(f"隧道 '{rule.comment}' 连接失败: {error_message}")
+
+        if is_reconnect:
+            time.sleep(RECONNECT_DELAY_SECONDS)
+
         if server and server.is_active:
             try: server.stop()
             except Exception: pass
-        # 连接失败后，保持实例在 active_tunnels 中，等待 MonitorService 下一轮重连
+    finally:
+        with tunnel_lock:
+            if tunnel_id in tunnels_being_stopped:
+                if server and server.is_active:
+                    try: server.stop()
+                    except Exception as e:
+                        ui_logger.error(f"在 finally 块中停止隧道 '{rule.comment}' 时出错: {e}")
+                tunnels_being_stopped.discard(tunnel_id)
+
 
 def start_tunnel(server_group: ServerGroup, rule: ForwardRule):
     """外部调用：注册隧道并尝试立即启动连接。"""
@@ -240,11 +264,10 @@ def start_tunnel(server_group: ServerGroup, rule: ForwardRule):
 
     with tunnel_lock:
         if tunnel_id in active_tunnels:
-            # 隧道已存在，可能只是连接断开，无需重复启动
-            ui_logger.warning(f"隧道 {rule.comment} 已在管理中，不重复添加。")
+            ui_logger.warning(f"隧道 '{rule.comment}' 已在管理中，不重复添加。")
             return
+        tunnels_being_stopped.discard(tunnel_id)
 
-    # 提交到执行器中进行阻塞式连接尝试
     connection_executor.submit(attempt_connection, tunnel_id, server_group, rule, False)
 
 
@@ -254,25 +277,32 @@ def stop_tunnel(server_group_id: str, rule_id: str):
 
     server = None
     with tunnel_lock:
-        # 移除 sshtunnel 实例
+        tunnels_being_stopped.add(tunnel_id)
         server = active_tunnels.pop(tunnel_id, None)
 
     if server:
-        ui_logger.info(f"正在停止隧道 {tunnel_id} ('{server.local_bind_address[1]}')...")
-        try:
-            if server.is_active:
-                server.stop()
-            ui_logger.info(f"隧道 {tunnel_id} 已安全停止。")
-        except Exception as e:
-            # 停止一个可能已经处于异常状态的隧道时，可能会抛出异常
-            ui_logger.error(f"停止隧道 {tunnel_id} 时出错: {e}")
+        def do_stop():
+            rule = next((f for g in app_config.server_groups if g.id == server_group_id for f in g.forwards if f.id == rule_id), None)
+            comment = rule.comment if rule else tunnel_id
+            ui_logger.info(f"正在停止隧道 '{comment}'...")
+            try:
+                if server.is_active:
+                    server.stop()
+                ui_logger.info(f"隧道 '{comment}' 已安全停止。")
+            except Exception as e:
+                ui_logger.error(f"停止隧道 '{comment}' 时出错: {e}")
+            finally:
+                with tunnel_lock:
+                    tunnels_being_stopped.discard(tunnel_id)
+        connection_executor.submit(do_stop)
+    else:
+        ui_logger.info(f"隧道 {tunnel_id} 未处于活动状态，但已标记为停止，连接尝试将被中止。")
 
 
 def stop_all_tunnels_for_group(server_group_id: str):
     """停止一个服务器组下的所有隧道。"""
     group = next((g for g in app_config.server_groups if g.id == server_group_id), None)
     if group:
-        # 注意：这里需要对副本进行操作，因为 stop_tunnel 会修改 forwards 列表
         for f in list(group.forwards):
             stop_tunnel(group.id, f.id)
 
@@ -286,52 +316,57 @@ class TunnelMonitorService(threading.Thread):
         self._stop_event = threading.Event()
 
     def stop(self):
-        """设置停止事件，主循环将退出。"""
         self._stop_event.set()
 
     def run(self):
-        """监控主循环。"""
         ui_logger.info("隧道监控服务已启动。")
         while not self._stop_event.is_set():
             tunnels_to_reconnect = []
 
-            # 复制 active_tunnels 列表以避免在迭代时被修改
             with tunnel_lock:
-                current_active_tunnels = list(active_tunnels.items())
+                # 创建当前受管隧道的快照以进行迭代
+                managed_tunnels_snapshot = list(active_tunnels.items())
 
-            for tunnel_id, server in current_active_tunnels:
-                # 1. 检查配置是否仍然存在且启用
-                try:
-                    group_id, rule_id = tunnel_id.split('_')
-                except ValueError:
-                    ui_logger.error(f"无效的隧道ID格式: {tunnel_id}")
-                    stop_tunnel(group_id, rule_id)
-                    continue
+            for tunnel_id, server in managed_tunnels_snapshot:
+                if tunnel_id in tunnels_being_stopped:
+                    continue # 如果隧道正在被手动停止，则跳过检查
 
-                group = next((g for g in app_config.server_groups if g.id == group_id), None)
-                if not group or not group.enabled:
-                    stop_tunnel(group_id, rule_id)
-                    continue
-
-                rule = next((f for f in group.forwards if f.id == rule_id), None)
-                if not rule or not rule.enabled:
-                    stop_tunnel(group_id, rule_id)
-                    continue
-
-                # 2. 检查隧道状态
                 if not server.is_active:
-                    # 发现非活动隧道，添加到重连列表
-                    tunnels_to_reconnect.append((tunnel_id, group, rule))
+                    try:
+                        group_id, rule_id = tunnel_id.split('_')
+                        group = next((g for g in app_config.server_groups if g.id == group_id), None)
+                        if group:
+                            rule = next((f for f in group.forwards if f.id == rule_id), None)
+                            if rule and group.enabled and rule.enabled:
+                                ui_logger.warning(f"监控服务发现隧道 '{rule.comment}' 已断开，准备重连。")
+                                tunnels_to_reconnect.append((tunnel_id, group, rule))
+                    except (ValueError, StopIteration):
+                        # 如果解析ID或查找配置失败，说明配置已过时，将其移除
+                        ui_logger.error(f"无法找到隧道 {tunnel_id} 的配置，将停止并移除。")
+                        stop_tunnel(*tunnel_id.split('_'))
 
-            # 3. 提交重连任务到线程池
+            # 现在处理需要重连的隧道
             for tunnel_id, group, rule in tunnels_to_reconnect:
-                # 将重连操作提交给线程池执行，避免阻塞监控线程
+                old_server = None
+                with tunnel_lock:
+                    if tunnel_id in tunnels_being_stopped:
+                        continue
+                    # 采用“销毁并重建”策略，先移除旧的、失效的实例
+                    old_server = active_tunnels.pop(tunnel_id, None)
+
+                # BUGFIX: 在锁之外，显式停止旧的实例以释放资源
+                if old_server:
+                    try:
+                        old_server.stop()
+                    except Exception as e:
+                        ui_logger.info(f"在清理旧隧道实例 '{rule.comment}' 时出现错误(可忽略): {e}")
+
+                # 提交一个全新的连接任务
                 connection_executor.submit(attempt_connection, tunnel_id, group, rule, True)
 
-            # 休息，等待下一轮检查
             self._stop_event.wait(self.check_interval)
 
-# --- Flask API & WebSocket Endpoints (Use new start/stop functions) ---
+# --- Flask API & WebSocket Endpoints ---
 
 @socketio.on('connect')
 def handle_connect():
@@ -378,8 +413,8 @@ def test_server_connection_with_paramiko() -> Union[Response, Tuple[Response, in
     user = data.get('ssh_user')
     password = data.get('ssh_pass')
 
-    if not all([host, user, password]):
-        return jsonify({'status': 'error', 'message': '缺少必要的连接参数 (ssh_host, ssh_user, ssh_pass)'}), 400
+    if not all([host, user]): # 密码可以为空
+        return jsonify({'status': 'error', 'message': '缺少必要的连接参数 (ssh_host, ssh_user)'}), 400
 
     ssh_client = paramiko.SSHClient()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -439,7 +474,8 @@ def edit_server(server_id: str) -> Union[Response, Tuple[Response, int]]:
     data = request.json
     group.name = data['name']
     conn = group.ssh_connection
-    conn.ssh_server_host = data['ssh_host']; conn.ssh_server_port = int(data['ssh_port'])
+    conn.ssh_server_host = data['ssh_host']
+    conn.ssh_server_port = int(data['ssh_port'])
     conn.ssh_username = data['ssh_user']
     if data.get('ssh_pass'):
         conn.ssh_password = data['ssh_pass']
@@ -508,7 +544,6 @@ def edit_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Response,
     if not rule: return jsonify({'status': 'error', 'message': '未找到隧道'}), 404
     data = request.json
 
-    # 检查是否有需要重启的配置更改 (端口, 地址)
     needs_restart = (
             rule.local_host != data['local_host'] or
             rule.local_port != int(data['local_port']) or
@@ -516,15 +551,17 @@ def edit_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Response,
             rule.remote_port != int(data['remote_port'])
     )
 
-    rule.local_host = data['local_host']; rule.local_port = int(data['local_port'])
-    rule.remote_host = data['remote_host']; rule.remote_port = int(data['remote_port'])
+    rule.local_host = data['local_host']
+    rule.local_port = int(data['local_port'])
+    rule.remote_host = data['remote_host']
+    rule.remote_port = int(data['remote_port'])
     rule.comment = data['comment']
 
-    if needs_restart and group.enabled:
+    if needs_restart and group.enabled and rule.enabled:
         ui_logger.info(f"隧道 '{rule.comment}' 配置已更改 (需要重启)。")
         stop_tunnel(server_id, rule_id)
         time.sleep(0.5)
-        if rule.enabled: start_tunnel(group, rule)
+        start_tunnel(group, rule)
     else:
         ui_logger.info(f"隧道 '{rule.comment}' 注释已更新，无需重启。")
 
@@ -557,23 +594,11 @@ def toggle_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Respons
 
     return jsonify({'status': 'success', 'enabled': rule.enabled})
 
-
-
 @app.route('/favicon.ico')
 def facico():
     directory = os.path.join(STATIC_FOLDER, 'ico')
     filename = 'favicon.ico'
     return send_from_directory(directory, filename)
-
-
-
-
-
-
-
-
-
-
 
 @app.route('/api/control/toggle_all/<action>', methods=['POST'])
 def toggle_all_tunnels(action: str) -> Union[Response, Tuple[Response, int]]:
@@ -595,26 +620,21 @@ def load_and_start_all_tunnels():
         if group.enabled:
             for rule in group.forwards:
                 if rule.enabled:
-                    # 将连接尝试提交给线程池
                     connection_executor.submit(attempt_connection, f"{group.id}_{rule.id}", group, rule, False)
     ui_logger.info("所有初始隧道任务已派发。")
 
-    # 启动单一监控服务线程
     monitor_service = TunnelMonitorService(RECONNECT_DELAY_SECONDS)
     monitor_service.start()
-    ui_logger.info("中央隧道监控服务已启动。")
 
 
 def shutdown_handler(signum, frame):
     """安全关闭所有隧道、线程池和监控服务。"""
     print("\n[*] 收到退出信号，正在关闭所有隧道和监控服务...")
 
-    # 1. 停止中央监控服务
     if monitor_service:
         monitor_service.stop()
         monitor_service.join(timeout=3)
 
-    # 2. 停止所有活跃的隧道
     with tunnel_lock:
         tunnel_ids = list(active_tunnels.keys())
 
@@ -625,7 +645,8 @@ def shutdown_handler(signum, frame):
         except Exception as e:
             print(f"关闭隧道 {tunnel_id} 时发生错误: {e}")
 
-    # 3. 关闭线程池
+    # 等待停止任务完成
+    time.sleep(2)
     connection_executor.shutdown(wait=True)
 
     print("[*] 程序退出。")
@@ -634,14 +655,12 @@ def shutdown_handler(signum, frame):
 
 def main():
     try:
-        # 兼容旧的 config.json 文件
         if os.path.exists("./config.json"):
             with open("./config.json", "r", encoding="utf-8") as f:
                 data = f.read()
                 data = json.loads(data)
                 data = convert_forward_config(data)
 
-                # 确保 resources/config 目录存在
                 config_dir = os.path.dirname(CONFIG_FILE_PATH)
                 os.makedirs(config_dir, exist_ok=True)
 
@@ -650,7 +669,6 @@ def main():
             os.remove("./config.json")
             ui_logger.info("成功从旧格式 config.json 迁移配置。")
     except Exception as e:
-        # 打印迁移错误，但不阻止程序继续运行
         print(f"配置迁移过程中出现错误: {e}")
 
     parser = argparse.ArgumentParser(description="SSH 隧道 Web 管理器")
@@ -665,10 +683,12 @@ def main():
 
     url = f"http://{args.host}:{args.port}"
     print(f"在浏览器中打开: {url}")
-    webbrowser.open_new(url)
+    try:
+        webbrowser.open_new(url)
+    except Exception:
+        print("无法自动打开浏览器，请手动访问上面的地址。")
 
-    print("SSH Tunnel Manager 已启动。")
-    # 使用 gevent 运行 Flask 和 SocketIO
+    print("Mignon SSH Tunnel Manager 已启动。")
     socketio.run(app, host=args.host, port=args.port, debug=False)
 
 if __name__ == '__main__':
