@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mignon SSH Tunnel Manager</title>
+    <title>ssh relay track</title>
     <script>
-        // Prevent theme flash by applying the theme from localStorage immediately.
         (function() {
-            const storedTheme = localStorage.getItem('theme') || 'dark'; // Default to dark theme
+            const storedTheme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-bs-theme', storedTheme);
         })();
     </script>
+        <link rel="">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sweetalert2.min.css') }}">
@@ -24,49 +24,47 @@
             font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             transition: background-color 0.3s, color 0.3s;
         }
-        /* 定义亮金色样式 */
-        /* 浅彩色流动效果样式 */
+        @font-face {
+            font-family: 'Cyberpunk City';
+
+            
+            src: url('/static/css/fonts/Sdcyberpunkcitydemo-pgyBd.otf') format('opentype');
+
+            font-weight: normal;
+            font-style: normal;
+
+            font-display: swap;
+        }
         .bg-flow-color {
-            /* * 1. 基础设置：用一个超大的线性渐变作为背景，包含多种浅色。
-             * 这里使用了浅蓝、浅绿、浅粉、浅紫。
-             */
+
             background: linear-gradient(
                 135deg,
-                 #65a7f9,  /* 柔和天蓝 */
-                #6cdd85,  /* 柔和薄荷绿 */
-                #ff8b94,  /* 柔和珊瑚粉 */
-                #c091f0   /* 柔和薰衣草紫 */
+                 #65a7f9,  
+                #6cdd85,  
+                #ff8b94,  
+                #c091f0   
             );
 
-            /* 2. 放大背景：将背景尺寸放大到容器的200%，为流动做准备 */
             background-size: 400% 400%;
 
-            /* 3. 文本颜色：在浅色背景上使用深色文本 */
             color: #333333 !important;
 
-            /* 4. 圆角：为了美观，通常徽章需要圆角 */
-            border-radius: 0.375rem; /* Bootstrap默认圆角 */
+            border-radius: 0.375rem;
 
-            /* 5. 应用动画：指定动画名称、持续时间、循环方式 */
-            animation: flowGradient 10s ease infinite alternate; /* 10秒一个循环，缓动，无限，来回播放 */
+            animation: flowGradient 5s ease infinite alternate;
 
-            /* 确保覆盖 Bootstrap 的背景色 */
             background-color: transparent !important;
         }
 
-/* 动画关键帧定义 */
         @keyframes flowGradient {
             0% {
-                /* 起点：背景左上角对齐容器 */
-                background-position: 0% 50%;
+                background-position: 0 50%;
             }
             50% {
-                /* 中点：背景移动到右下角附近 */
                 background-position: 100% 50%;
             }
             100% {
-                /* 终点（回到起点，但因为用了 alternate 属性，动画会反向播放） */
-                background-position: 0% 50%;
+                background-position: 0 50%;
             }
         }
         .navbar {
@@ -82,10 +80,106 @@
             transform: translateY(-5px);
             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 0 20px var(--glow-color);
         }
-        .server-card.disabled {
-            opacity: 0.6; background-color: var(--bs-secondary-bg);
-            box-shadow: none; transform: none;
-        }
+
+.glitch-container {
+    position: relative;
+    display: inline-block;
+}
+.cool-text {
+    font-family: 'Cyberpunk City', sans-serif;
+    font-weight: 300;
+    font-size: 1.8rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+
+    color: #ffde00;
+text-shadow:
+    0 0 5px #ffde00,
+    0 0 10px #ff4500,
+
+    2px 2px 0 #ff0077,
+    -2px -2px 0 #00ffff;
+}
+
+.glitch-block {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.glitch-block::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 1px;
+    left: 1px;
+}
+
+
+.glitch-container .glitch-block:nth-child(2),
+.glitch-container .glitch-block:nth-child(4) {
+    background-color: #00eaff;
+}
+.glitch-container .glitch-block:nth-child(2)::before,
+.glitch-container .glitch-block:nth-child(4)::before {
+    background-color: #708090;
+}
+
+.glitch-container .glitch-block:nth-child(3),
+.glitch-container .glitch-block:nth-child(5) {
+    background-color: #708090;
+}
+.glitch-container .glitch-block:nth-child(3)::before,
+.glitch-container .glitch-block:nth-child(5)::before {
+    background-color: #00eaff;
+}
+
+
+.glitch-container .glitch-block:nth-child(2) { animation: glitch-flicker-1 3.5s infinite steps(1, end); }
+.glitch-container .glitch-block:nth-child(3) { animation: glitch-flicker-2 2.8s infinite steps(1, end); }
+.glitch-container .glitch-block:nth-child(4) { animation: glitch-flicker-3 4.2s infinite steps(1, end); }
+.glitch-container .glitch-block:nth-child(5) { animation: glitch-flicker-4 3.1s infinite steps(1, end); }
+
+
+@keyframes glitch-flicker-1 {
+    0%, 100% { opacity: 0; }
+    10%, 12% { opacity: 1; top: 30%; left: 25%; width: 30%; height: 3px; }
+    13%, 100% { opacity: 0; }
+
+    60%, 63% { opacity: 1; top: 43%; left: 45%; width: 15%; height: 2px; }
+    64%, 100% { opacity: 0; }
+}
+
+@keyframes glitch-flicker-2 {
+    0%, 100% { opacity: 0; }
+    5%, 7% { opacity: 1; top: 35%; left: 70%; width: 25%; height: 4px; }
+    8%, 100% { opacity: 0; }
+
+    70%, 73% { opacity: 1; top: 25%; left: 5%; width: 6%; height: 2px; } 
+    74%, 100% { opacity: 0; }
+}
+
+@keyframes glitch-flicker-3 {
+    0%, 100% { opacity: 0; }
+    20%, 23% { opacity: 1; top: 56%; left: 30%; width: 33%; height: 2px; }
+    24%, 100% { opacity: 0; }
+
+    50%, 53% { opacity: 1; top: 20%; left: 60%; width: 7%; height: 3px; }
+    54%, 100% { opacity: 0; }
+}
+
+@keyframes glitch-flicker-4 {
+    0%, 100% { opacity: 0; }
+    15%, 17% { opacity: 1; top: 45%; left: -5%; width: 22%; height: 4px; }
+    18%, 100% { opacity: 0; }
+
+    80%, 83% { opacity: 1; top: 60%; left: 85%; width: 10%; height: 3px; }
+    84%, 100% { opacity: 0; }
+}
         .action-icons { display: flex; align-items: center; gap: 12px; }
         .form-check-input { margin-top: 0; }
         .footer { padding: 2rem 0; margin-top: 2rem; border-top: 1px solid var(--bs-border-color); }
@@ -110,9 +204,17 @@
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
     <div class="container-fluid">
-        <a class="navbar-brand" href="#">
+    <a class="navbar-brand" href="#">
     <img src="/favicon.ico" alt="Mignon Logo" style="height: 30px; margin-right: 10px; margin-bottom: 10px;">
-    Mignon SSH Tunnel Manager
+
+    <div class="glitch-container">
+        <span class="cool-text" data-text="Mignon ssh RelayTrack">Mignon SSH Relay Track </span>
+
+        <span class="glitch-block"></span>
+        <span class="glitch-block"></span>
+        <span class="glitch-block"></span>
+        <span class="glitch-block"></span>
+    </div>
 </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
@@ -123,16 +225,17 @@
             </form>
             <ul class="navbar-nav ms-auto align-items-center flex-row flex-wrap justify-content-center">
                 <li class="nav-item mx-1">
-                    <a href="/logs" class="btn btn-secondary" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
+                    <a href="/logs" class="btn btn-secondary rounded-pill" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
                 </li>
                 <li class="nav-item mx-1">
-                    <button id="add-server-btn" class="btn btn-success"><i class="bi bi-plus-circle"></i> 新增</button>
+                    <button id="add-server-btn" class="btn btn-success rounded-pill "><i class="bi bi-plus-circle"></i></button>
                 </li>
                 <li class="nav-item mx-1">
                     <div class="control-panel">
                         <div class="btn-group">
-                            <button class="btn btn-outline-primary" id="enable-all-btn" title="一键启用所有"><i class="bi bi-play-fill"></i></button>
-                            <button class="btn btn-outline-warning ms-2" id="disable-all-btn" title="一键禁用所有"><i class="bi bi-stop-fill"></i></button>
+                            <button class="btn btn-warning rounded-pill" id="enable-all-btn" title="一键启用所有"><i class="bi bi-play-fill"></i></button>
+
+<button class="btn btn-danger ms-2 rounded-pill" id="disable-all-btn" title="一键禁用所有"><i class="bi bi-stop-fill"></i></button>
                         </div>
                     </div>
                 </li>
@@ -157,7 +260,9 @@
                     <small class="text-muted">({{ group.ssh_connection.ssh_username }}@{{ group.ssh_connection.ssh_server_host }}:{{ group.ssh_connection.ssh_server_port }})</small>
                 </h5>
                 <div class="action-icons">
-                    <button class="btn btn-sm btn-info restart-server-btn" data-id="{{ group.id }}" {% if not group.enabled %}disabled{% endif %}><i class="bi bi-arrow-clockwise"></i> 重启</button>
+                    <button class="btn btn-sm btn-info restart-server-btn rounded-pill" data-id="{{ group.id }}" {% if not group.enabled %}disabled{% endif %}>
+                        <i class="bi bi-arrow-clockwise"></i> 重启
+                </button>
                     <i class="bi bi-pencil-square text-info edit-server-btn" data-id="{{ group.id }}" title="编辑服务器组" style="cursor: pointer;"></i>
                     <i class="bi bi-plus-square text-success add-tunnel-btn" data-id="{{ group.id }}" title="新增隧道" style="cursor: pointer;"></i>
                     <div class="form-check form-switch d-flex align-items-center">
@@ -219,7 +324,6 @@
 
 <script>
     $(document).ready(function() {
-        // --- Notifications ---
         function requestNotificationPermission() {
             if ("Notification" in window && Notification.permission !== "denied") {
                 Notification.requestPermission();
@@ -242,7 +346,6 @@
             }
         }
 
-        // --- WebSocket & Theme ---
         const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
 
         socket.on('connect', () => {
@@ -253,7 +356,6 @@
         socket.on('notification', (data) => showNotification(data.type, data.message));
 
         const themeToggle = $('#theme-toggle');
-        // Set the toggle switch state based on the theme applied by the script in <head>
         const currentTheme = document.documentElement.getAttribute('data-bs-theme');
         themeToggle.prop('checked', currentTheme === 'light');
 
@@ -263,7 +365,6 @@
             localStorage.setItem('theme', theme);
         });
 
-        // --- UI & State Management ---
         function updateUIStates() {
             $('.server-card').each(function() {
                 const card = $(this);
@@ -277,7 +378,6 @@
         }
         updateUIStates();
 
-        // --- Search Functionality ---
         $('#search-box').on('input', function() {
             const searchTerm = $(this).val().toLowerCase();
             $('.server-card').each(function() {
@@ -296,7 +396,6 @@
             });
         });
 
-        // --- API Call Helper ---
         function apiCall(url, method, data, successCallback, errorCallback) {
             $.ajax({
                 url: url, type: method, contentType: 'application/json',
@@ -313,7 +412,6 @@
             });
         }
 
-        // --- HTML Templates ---
         const createServerCardHTML = (group) => {
             const disabledClass = group.enabled ? '' : 'disabled';
             const disabledAttr = group.enabled ? '' : 'disabled';
@@ -325,7 +423,7 @@
                             <small class="text-muted">(${group.ssh_connection.ssh_username}@${group.ssh_connection.ssh_server_host}:${group.ssh_connection.ssh_server_port})</small>
                         </h5>
                         <div class="action-icons">
-                            <button class="btn btn-sm btn-info restart-server-btn" data-id="${group.id}" ${disabledAttr}><i class="bi bi-arrow-clockwise"></i> 重启</button>
+                            <button class="btn btn-sm btn-info restart-server-btn rounded-pill" data-id="${group.id}" ${disabledAttr}><i class="bi bi-arrow-clockwise"></i> 重启</button>
                             <i class="bi bi-pencil-square text-info edit-server-btn" data-id="${group.id}" title="编辑服务器组" style="cursor: pointer;"></i>
                             <i class="bi bi-plus-square text-success add-tunnel-btn" data-id="${group.id}" title="新增隧道" style="cursor: pointer;"></i>
                             <div class="form-check form-switch d-flex align-items-center">
@@ -340,37 +438,64 @@
                 </div>`;
         };
 
-        const createTunnelRowHTML = (group, forward) => {
-             const typeBadge = forward.tunnel_type === 'reverse'
-                ? `<span class="badge bg-info me-2">穿透</span>`
-                : `<span class="badge bg-primary me-2">转发</span>`;
-            return `
-                <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-${group.id}-${forward.id}" data-search-text="${forward.comment} ${forward.local_port} ${forward.remote_port}">
-                    <div>
-                        ${typeBadge}<strong>${forward.comment}</strong><br>
-                        <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="${forward.local_host}:${forward.local_port}">
-                            ${forward.local_host}:${forward.local_port} <i class="bi bi-clipboard"></i>
-                        </span>
-                        <i class="bi bi-arrow-right mx-2"></i>
-                        <span class="badge bg-secondary">${forward.remote_host}:${forward.remote_port}</span>
-                    </div>
-                    <div class="action-icons">
-                        <i class="bi bi-pencil-square text-info edit-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="编辑隧道" style="cursor: pointer;"></i>
-                        <div class="form-check form-switch d-flex align-items-center">
-                            <input class="form-check-input tunnel-toggle" type="checkbox" role="switch" data-server-id="${group.id}" data-id="${forward.id}" ${forward.enabled ? 'checked' : ''}>
-                        </div>
-                        <i class="bi bi-trash text-danger delete-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="删除隧道" style="cursor: pointer;"></i>
-                    </div>
-                </div>`;
-        };
+     const createTunnelRowHTML = (group, forward) => {
+    let tunnelContent;
+    let typeBadge;
+    let fromAddress;
+    let arrowIcon;
+    let toAddress;
+        console.log(group)
+    if (forward.tunnel_type === 'reverse') {
+        typeBadge = `<span class="badge bg-flow-color me-2">内网穿透</span>`;
+        const sshHost = group.ssh_connection && group.ssh_connection.ssh_server_host ? group.ssh_connection.ssh_server_host : 'SSH_SERVER_HOST';
 
-        // --- Event Handlers (Forms) ---
+        fromAddress = `
+            <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="${sshHost}:${forward.remote_port}">
+                ${sshHost}:${forward.remote_port} <i class="bi bi-clipboard"></i>
+            </span>`;
+        arrowIcon = `<i class="bi bi-arrow-left mx-2"></i>`;
+        toAddress = `<span class="badge bg-secondary">${forward.local_host}:${forward.local_port}</span>`;
+
+    } else {
+
+        typeBadge = `<span class="badge bg-primary me-2">端口转发</span>`;
+
+        fromAddress = `
+            <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="${forward.local_host}:${forward.local_port}">
+                ${forward.local_host}:${forward.local_port} <i class="bi bi-clipboard"></i>
+            </span>`;
+        arrowIcon = `<i class="bi bi-arrow-right mx-2"></i>`;
+        toAddress = `<span class="badge bg-secondary">${forward.remote_host}:${forward.remote_port}</span>`;
+    }
+
+    tunnelContent = `
+        ${typeBadge}
+        <strong>${forward.comment}</strong><br>
+        ${fromAddress}
+        ${arrowIcon}
+        ${toAddress}`;
+
+    return `
+        <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-${group.id}-${forward.id}" data-search-text="${forward.comment} ${forward.local_port} ${forward.remote_port}">
+            <div>
+                ${tunnelContent}
+            </div>
+            <div class="action-icons">
+                <i class="bi bi-pencil-square text-info edit-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="编辑隧道" style="cursor: pointer;"></i>
+                <div class="form-check form-switch d-flex align-items-center">
+                    <input class="form-check-input tunnel-toggle" type="checkbox" role="switch" data-server-id="${group.id}" data-id="${forward.id}" ${forward.enabled ? 'checked' : ''}>
+                </div>
+                <i class="bi bi-trash text-danger delete-tunnel-btn" data-server-id="${group.id}" data-id="${forward.id}" title="删除隧道" style="cursor: pointer;"></i>
+            </div>
+        </div>`;
+};
+
         const handleServerForm = (isEdit = false, serverId = null, currentData = {}) => {
             const performSave = (formData) => {
                 const url = isEdit ? `/api/servers/${serverId}` : '/api/servers';
                 const method = isEdit ? 'PUT' : 'POST';
                 apiCall(url, method, formData,
-                    (res) => { // Success callback for SAVE
+                    (res) => {
                         showToast('success', res.message);
                         if (isEdit) {
                             const card = $(`#server-${serverId}`);
@@ -385,7 +510,7 @@
                         updateUIStates();
                         Swal.close();
                     },
-                    (xhr) => { // Error callback for SAVE
+                    (xhr) => {
                         const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : '保存失败!';
                         $('#swal-error-message').text(errorMsg);
                         Swal.hideLoading();
@@ -463,7 +588,7 @@
                     $('#swal-remote-host').attr('placeholder', '远程监听 Host (通常为 0.0.0.0)');
                     $('#swal-remote-port').attr('placeholder', '远程监听 Port');
                     helpTextElement.text('将公网服务器的[远程监听]流量，转发到本机的[本地目标服务]。');
-                } else { // forward
+                } else {
                     $('#swal-local-host').attr('placeholder', '本地监听 Host');
                     $('#swal-local-port').attr('placeholder', '本地监听 Port');
                     $('#swal-remote-host').attr('placeholder', '远程目标 Host');
@@ -509,7 +634,7 @@
                     apiCall(url, method, result.value, (res) => {
                         showToast('success', res.message);
                         const tunnelList = $(`#server-${serverId}`).find('.list-group');
-                        const newRow = $(createTunnelRowHTML({id: serverId}, res.rule)).hide();
+                        const newRow = $(createTunnelRowHTML({id: serverId, ssh_connection:res.ssh_connection}, res.rule)).hide();
                         if (isEdit) {
                             $(`#tunnel-${serverId}-${ruleId}`).replaceWith(newRow);
                         } else {
@@ -521,7 +646,6 @@
                 }
             });
         };
-        // --- Event Listeners (Clicks) ---
         $('#add-server-btn').on('click', () => handleServerForm());
         $('#server-list').on('click', '.edit-server-btn', function() {
             const serverId = $(this).data('id');

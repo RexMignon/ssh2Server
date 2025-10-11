@@ -167,12 +167,12 @@ class ReverseTunnelThread(threading.Thread):
     def run(self):
         try:
             self.client = paramiko.SSHClient()
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.client.set_missing_host_key_policy(paramiko.WarningPolicy())
             self._log('info', f"正在连接到SSH服务器 {self.server_info['host']}:{self.server_info['port']}...")
             self.client.connect(
                 hostname=self.server_info['host'], port=self.server_info['port'],
                 username=self.server_info['user'], password=self.server_info['pass'],
-                timeout=10, look_for_keys=False, allow_agent=False
+                timeout=10, look_for_keys=False, allow_agent=False, auth_timeout=30
             )
             transport = self.client.get_transport()
 
@@ -532,7 +532,7 @@ def edit_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Response,
         stop_tunnel(server_id, rule_id)
         time.sleep(0.5)
         start_tunnel(group, rule)
-    return jsonify({'status': 'success', 'message': '隧道已更新', 'rule': object_to_dict(rule)})
+    return jsonify({'status': 'success', 'message': '隧道已更新', 'rule': object_to_dict(rule), 'ssh_connection': object_to_dict(group.ssh_connection)})
 
 
 @app.route('/api/tunnels/<string:server_id>/<string:rule_id>', methods=['DELETE'])
