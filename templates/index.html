@@ -128,15 +128,24 @@
                         <div>
                             {% if forward.tunnel_type == 'reverse' %}
                                 <span class="badge bg-info me-2">穿透</span>
+                                <strong>{{ forward.comment }}</strong><br>
+
+                            <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ group.ssh_connection.ssh_server_host }}:{{ forward.remote_port }}">
+                                {{ group.ssh_connection.ssh_server_host }}:{{ forward.remote_port }} <i class="bi bi-clipboard"></i>
+                            </span>
+                            <i class="bi bi-arrow-left mx-2"></i>
+                            <span class="badge bg-secondary">{{ forward.local_host }}:{{ forward.local_port }}</span>
                             {% else %}
                                 <span class="badge bg-primary me-2">转发</span>
-                            {% endif %}
-                            <strong>{{ forward.comment }}</strong><br>
+                                <strong>{{ forward.comment }}</strong><br>
+
                             <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ forward.local_host }}:{{ forward.local_port }}">
                                 {{ forward.local_host }}:{{ forward.local_port }} <i class="bi bi-clipboard"></i>
                             </span>
                             <i class="bi bi-arrow-right mx-2"></i>
                             <span class="badge bg-secondary">{{ forward.remote_host }}:{{ forward.remote_port }}</span>
+                            {% endif %}
+
                         </div>
                         <div class="action-icons">
                             <i class="bi bi-pencil-square text-info edit-tunnel-btn" data-server-id="{{ group.id }}" data-id="{{ forward.id }}" title="编辑隧道" style="cursor: pointer;"></i>
