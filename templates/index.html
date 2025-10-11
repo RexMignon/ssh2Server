@@ -123,6 +123,11 @@
                     {% for forward in group.forwards %}
                     <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-{{ group.id }}-{{ forward.id }}" data-search-text="{{ forward.comment }} {{ forward.local_port }} {{ forward.remote_port }}">
                         <div>
+                            {% if forward.tunnel_type == 'reverse' %}
+                                <span class="badge bg-info me-2">穿透</span>
+                            {% else %}
+                                <span class="badge bg-primary me-2">转发</span>
+                            {% endif %}
                             <strong>{{ forward.comment }}</strong><br>
                             <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ forward.local_host }}:{{ forward.local_port }}">
                                 {{ forward.local_host }}:{{ forward.local_port }} <i class="bi bi-clipboard"></i>
@@ -279,10 +284,13 @@
         };
 
         const createTunnelRowHTML = (group, forward) => {
+             const typeBadge = forward.tunnel_type === 'reverse'
+                ? `<span class="badge bg-info me-2">穿透</span>`
+                : `<span class="badge bg-primary me-2">转发</span>`;
             return `
                 <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-${group.id}-${forward.id}" data-search-text="${forward.comment} ${forward.local_port} ${forward.remote_port}">
                     <div>
-                        <strong>${forward.comment}</strong><br>
+                        ${typeBadge}<strong>${forward.comment}</strong><br>
                         <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="${forward.local_host}:${forward.local_port}">
                             ${forward.local_host}:${forward.local_port} <i class="bi bi-clipboard"></i>
                         </span>
@@ -301,14 +309,12 @@
 
         // --- Event Handlers (Forms) ---
         const handleServerForm = (isEdit = false, serverId = null, currentData = {}) => {
-            const performSave = (formData, isTre) => {
+            const performSave = (formData) => {
                 const url = isEdit ? `/api/servers/${serverId}` : '/api/servers';
                 const method = isEdit ? 'PUT' : 'POST';
                 apiCall(url, method, formData,
                     (res) => { // Success callback for SAVE
-                        if (isTre==undefined){
-                            showToast('success', res.message);
-                        }
+                        showToast('success', res.message);
                         if (isEdit) {
                             const card = $(`#server-${serverId}`);
                             card.find('.server-name').text(res.group.name);
@@ -369,7 +375,8 @@
 
                     apiCall('/api/servers/test', 'POST', formData,
                         (res) => {
-                            performSave(formData, true);
+                            showToast('success', res.message);
+                            performSave(formData);
                         },
                         (xhr) => {
                             Swal.hideLoading();
@@ -383,29 +390,60 @@
                 }
             }).then(result => {
                 if (result.isConfirmed) {
-                    const formData = {
-                        name: $('#swal-name').val(), ssh_host: $('#swal-ssh-host').val(),
-                        ssh_port: $('#swal-ssh-port').val(), ssh_user: $('#swal-ssh-user').val(), ssh_pass: $('#swal-ssh-pass').val(),
-                    };
-                    performSave(formData, true);
+                    performSave(result.value);
                 }
             });
         };
 
         const handleTunnelForm = (isEdit = false, serverId, ruleId = null, currentData = {}) => {
+            const initialType = currentData.tunnel_type || 'forward';
+
+            const updatePlaceholders = (type) => {
+                const helpTextElement = $('#swal-tunnel-type-help');
+                if (type === 'reverse') {
+                    $('#swal-local-host').attr('placeholder', '本地目标服务 Host');
+                    $('#swal-local-port').attr('placeholder', '本地目标服务 Port');
+                    $('#swal-remote-host').attr('placeholder', '远程监听 Host (通常为 0.0.0.0)');
+                    $('#swal-remote-port').attr('placeholder', '远程监听 Port');
+                    helpTextElement.text('将公网服务器的[远程监听]流量，转发到本机的[本地目标服务]。');
+                } else { // forward
+                    $('#swal-local-host').attr('placeholder', '本地监听 Host');
+                    $('#swal-local-port').attr('placeholder', '本地监听 Port');
+                    $('#swal-remote-host').attr('placeholder', '远程目标 Host');
+                    $('#swal-remote-port').attr('placeholder', '远程目标 Port');
+                    helpTextElement.text('在本机开启[本地监听]，访问它将通过SSH服务器转发到[远程目标]。');
+                }
+            };
+
             Swal.fire({
                 title: isEdit ? '编辑隧道' : '新增隧道',
                 html: `
+                    <select id="swal-tunnel-type" class="swal2-select">
+                        <option value="forward" ${initialType === 'forward' ? 'selected' : ''}>端口转发</option>
+                        <option value="reverse" ${initialType === 'reverse' ? 'selected' : ''}>内网穿透</option>
+                    </select>
+                    <small id="swal-tunnel-type-help" class="form-text text-muted d-block my-2"></small>
                     <input id="swal-comment" class="swal2-input" placeholder="备注" value="${currentData.comment || ''}">
                     <input id="swal-local-host" class="swal2-input" placeholder="本地地址" value="${currentData.local_host || '127.0.0.1'}">
                     <input id="swal-local-port" class="swal2-input" placeholder="本地端口" type="number" value="${currentData.local_port || ''}">
                     <input id="swal-remote-host" class="swal2-input" placeholder="远程地址" value="${currentData.remote_host || '127.0.0.1'}">
                     <input id="swal-remote-port" class="swal2-input" placeholder="远程端口" type="number" value="${currentData.remote_port || ''}">
                 `,
+                didOpen: () => {
+                    updatePlaceholders(initialType);
+                    $('#swal-tunnel-type').on('change', function() {
+                        updatePlaceholders($(this).val());
+                    });
+                },
                 focusConfirm: false,
                 preConfirm: () => ({
-                    server_id: serverId, comment: $('#swal-comment').val(), local_host: $('#swal-local-host').val(),
-                    local_port: $('#swal-local-port').val(), remote_host: $('#swal-remote-host').val(), remote_port: $('#swal-remote-port').val(),
+                    server_id: serverId,
+                    tunnel_type: $('#swal-tunnel-type').val(),
+                    comment: $('#swal-comment').val(),
+                    local_host: $('#swal-local-host').val(),
+                    local_port: $('#swal-local-port').val(),
+                    remote_host: $('#swal-remote-host').val(),
+                    remote_port: $('#swal-remote-port').val(),
                 })
             }).then(result => {
                 if (result.isConfirmed) {
@@ -487,3 +525,4 @@
 </script>
 </body>
 </html>
+
