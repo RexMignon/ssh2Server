@@ -24,6 +24,51 @@
             font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             transition: background-color 0.3s, color 0.3s;
         }
+        /* 定义亮金色样式 */
+        /* 浅彩色流动效果样式 */
+        .bg-flow-color {
+            /* * 1. 基础设置：用一个超大的线性渐变作为背景，包含多种浅色。
+             * 这里使用了浅蓝、浅绿、浅粉、浅紫。
+             */
+            background: linear-gradient(
+                135deg,
+                 #65a7f9,  /* 柔和天蓝 */
+                #6cdd85,  /* 柔和薄荷绿 */
+                #ff8b94,  /* 柔和珊瑚粉 */
+                #c091f0   /* 柔和薰衣草紫 */
+            );
+
+            /* 2. 放大背景：将背景尺寸放大到容器的200%，为流动做准备 */
+            background-size: 400% 400%;
+
+            /* 3. 文本颜色：在浅色背景上使用深色文本 */
+            color: #333333 !important;
+
+            /* 4. 圆角：为了美观，通常徽章需要圆角 */
+            border-radius: 0.375rem; /* Bootstrap默认圆角 */
+
+            /* 5. 应用动画：指定动画名称、持续时间、循环方式 */
+            animation: flowGradient 10s ease infinite alternate; /* 10秒一个循环，缓动，无限，来回播放 */
+
+            /* 确保覆盖 Bootstrap 的背景色 */
+            background-color: transparent !important;
+        }
+
+/* 动画关键帧定义 */
+        @keyframes flowGradient {
+            0% {
+                /* 起点：背景左上角对齐容器 */
+                background-position: 0% 50%;
+            }
+            50% {
+                /* 中点：背景移动到右下角附近 */
+                background-position: 100% 50%;
+            }
+            100% {
+                /* 终点（回到起点，但因为用了 alternate 属性，动画会反向播放） */
+                background-position: 0% 50%;
+            }
+        }
         .navbar {
             backdrop-filter: blur(10px);
             background-color: rgba(var(--bs-dark-rgb), 0.85);
@@ -127,7 +172,7 @@
                     <div class="list-group-item d-flex justify-content-between align-items-center tunnel-row bg-transparent" id="tunnel-{{ group.id }}-{{ forward.id }}" data-search-text="{{ forward.comment }} {{ forward.local_port }} {{ forward.remote_port }}">
                         <div>
                             {% if forward.tunnel_type == 'reverse' %}
-                                <span class="badge bg-info me-2">穿透</span>
+                                <span class="badge bg-flow-color me-2">内网穿透</span>
                                 <strong>{{ forward.comment }}</strong><br>
 
                             <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ group.ssh_connection.ssh_server_host }}:{{ forward.remote_port }}">
@@ -136,7 +181,7 @@
                             <i class="bi bi-arrow-left mx-2"></i>
                             <span class="badge bg-secondary">{{ forward.local_host }}:{{ forward.local_port }}</span>
                             {% else %}
-                                <span class="badge bg-primary me-2">转发</span>
+                                <span class="badge bg-primary me-2">端口转发</span>
                                 <strong>{{ forward.comment }}</strong><br>
 
                             <span class="badge bg-primary copy-address" style="cursor: pointer;" title="点击复制" data-address="{{ forward.local_host }}:{{ forward.local_port }}">
