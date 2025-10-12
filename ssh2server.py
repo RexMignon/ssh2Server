@@ -184,7 +184,7 @@ class ReverseTunnelThread(threading.Thread):
                 transport.request_port_forward(remote_host, remote_port)
             except paramiko.SSHException as e:
                 if "TCP forwarding request denied" in str(e):
-                    self._log('warning', "服务器返回 'TCP forwarding request denied'，但这可能是假失败，将继续尝试运行。")
+                    print('warning', "服务器返回 'TCP forwarding request denied'，但这可能是假失败，将继续尝试运行。")
                 else:
                     raise
 

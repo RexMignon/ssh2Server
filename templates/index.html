@@ -10,7 +10,6 @@
             document.documentElement.setAttribute('data-bs-theme', storedTheme);
         })();
     </script>
-        <link rel="">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sweetalert2.min.css') }}">
@@ -27,7 +26,7 @@
         @font-face {
             font-family: 'Cyberpunk City';
 
-            
+
             src: url('/static/css/fonts/Sdcyberpunkcitydemo-pgyBd.otf') format('opentype');
 
             font-weight: normal;
@@ -35,14 +34,28 @@
 
             font-display: swap;
         }
+
+        /* 自定义纯黑色按钮样式 */
+.btn-dark-custom {
+
+    padding: 0.5rem 0.85rem; /* 垂直 0.375rem，水平 0.75rem */
+    background-color: #000000 !important;
+    border-color: #000000 !important;
+    color: #FFFFFF !important;
+}
+
+.btn-dark-custom:hover {
+    background-color: #333333 !important;
+    border-color: #333333 !important;
+}
         .bg-flow-color {
 
             background: linear-gradient(
                 135deg,
-                 #65a7f9,  
-                #6cdd85,  
-                #ff8b94,  
-                #c091f0   
+                 #65a7f9,
+                #6cdd85,
+                #ff8b94,
+                #c091f0
             );
 
             background-size: 400% 400%;
@@ -56,6 +69,18 @@
             background-color: transparent !important;
         }
 
+
+
+.btn-custom-add {
+    background-color: #a77aff !important;
+    border-color: #a77aff !important;
+    color: #fff !important;
+}
+
+.btn-custom-add:hover {
+    background-color: #5d36a5 !important;
+    border-color: #5d36a5 !important;
+}
         @keyframes flowGradient {
             0% {
                 background-position: 0 50%;
@@ -120,22 +145,46 @@ text-shadow:
 }
 
 
+/* 1. 淡蓝色按钮 (btn-info) 悬停效果 */
+.btn-info:hover {
+    /* 默认的 btn-info 颜色是 #0dcaf0 (青色/亮蓝)。悬停时稍微变暗。 */
+    background-color: #0c9abf !important;
+    border-color: #0c9abf !important;
+}
+
+/* 2. 警告色按钮 (btn-warning - 黄色) 悬停效果 */
+.btn-warning:hover {
+    /* 默认的 btn-warning 颜色是 #ffc107。悬停时稍微变暗。 */
+    background-color: #e0a800 !important;
+    border-color: #e0a800 !important;
+}
+
+/* 3. 危险色按钮 (btn-danger - 红色) 悬停效果 */
+.btn-danger:hover {
+    /* 默认的 btn-danger 颜色是 #dc3545。悬停时稍微变暗。 */
+    background-color: #c82333 !important;
+    border-color: #c82333 !important;
+}
+
 .glitch-container .glitch-block:nth-child(2),
 .glitch-container .glitch-block:nth-child(4) {
-    background-color: #00eaff;
+    background-image: linear-gradient(to bottom right,#f1d40e, #b4c4af, #c95f5f);
 }
+
 .glitch-container .glitch-block:nth-child(2)::before,
 .glitch-container .glitch-block:nth-child(4)::before {
-    background-color: #708090;
+    background-image: linear-gradient(to bottom right, #708090,#e8e8e8, #b4c4af, #ec0000, #5a6874); /* 可以选择更暗的颜色作为渐变终点 */
 }
 
 .glitch-container .glitch-block:nth-child(3),
 .glitch-container .glitch-block:nth-child(5) {
-    background-color: #708090;
+    background-image: linear-gradient(to bottom right,#f1d40e, #7c9ec0, #ffef97, #708090);
 }
+
 .glitch-container .glitch-block:nth-child(3)::before,
 .glitch-container .glitch-block:nth-child(5)::before {
-    background-color: #00eaff;
+
+    background-image: linear-gradient(to bottom right, #95a17a, #beff00, #95a17a, #ff8000, #95a17a, #ffea00); /* 可以选择更深的颜色作为渐变终点 */
 }
 
 
@@ -159,7 +208,7 @@ text-shadow:
     5%, 7% { opacity: 1; top: 35%; left: 70%; width: 25%; height: 4px; }
     8%, 100% { opacity: 0; }
 
-    70%, 73% { opacity: 1; top: 25%; left: 5%; width: 6%; height: 2px; } 
+    70%, 73% { opacity: 1; top: 25%; left: 5%; width: 6%; height: 2px; }
     74%, 100% { opacity: 0; }
 }
 
@@ -204,7 +253,7 @@ text-shadow:
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
     <div class="container-fluid">
-    <a class="navbar-brand" href="#">
+    <a class="navbar-brand">
     <img src="/favicon.ico" alt="Mignon Logo" style="height: 30px; margin-right: 10px; margin-bottom: 10px;">
 
     <div class="glitch-container">
@@ -225,10 +274,10 @@ text-shadow:
             </form>
             <ul class="navbar-nav ms-auto align-items-center flex-row flex-wrap justify-content-center">
                 <li class="nav-item mx-1">
-                    <a href="/logs" class="btn btn-secondary rounded-pill" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
-                </li>
+    <a href="/logs" class="btn btn-dark-custom btn-icon-square rounded-pill" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
+</li>
                 <li class="nav-item mx-1">
-                    <button id="add-server-btn" class="btn btn-success rounded-pill "><i class="bi bi-plus-circle"></i></button>
+                    <button id="add-server-btn" class="btn btn-custom-add rounded-pill " title="添加服务器组"><i class="bi bi-plus-lg"></i></button>
                 </li>
                 <li class="nav-item mx-1">
                     <div class="control-panel">
@@ -652,10 +701,19 @@ text-shadow:
             apiCall(`/api/servers/${serverId}`, 'GET', null, (data) => handleServerForm(true, serverId, data.group));
         });
         $('#server-list').on('click', '.add-tunnel-btn', function() { handleTunnelForm(false, $(this).data('id')); });
+
+        // MODIFIED LOGIC HERE
         $('#server-list').on('click', '.edit-tunnel-btn', function() {
             const serverId = $(this).data('server-id'), ruleId = $(this).data('id');
-            apiCall(`/api/tunnels/${serverId}/${ruleId}`, 'GET', null, (data) => handleTunnelForm(true, serverId, ruleId, data.rule));
+            apiCall(`/api/tunnels/${serverId}/${ruleId}`, 'GET', null, (data) => {
+                if (data.rule.tunnel_type === 'reverse' && data.rule.enabled) {
+                    showToast('warning', '请先禁用内网穿透隧道再进行修改');
+                    return;
+                }
+                handleTunnelForm(true, serverId, ruleId, data.rule);
+            });
         });
+
         $('#server-list').on('click', '.delete-server-btn', function() {
             const serverId = $(this).data('id');
             Swal.fire({ title: '确认删除服务器组?', text: "此操作不可逆!", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: '确认删除'
