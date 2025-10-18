@@ -1,9 +1,7 @@
 import os
 import sys
-import signal
 import threading
 import time
-import webbrowser
 import argparse
 import logging
 import concurrent.futures
@@ -12,13 +10,15 @@ from flask import Flask, render_template, request, jsonify, Response, g, send_fr
 from flask_socketio import SocketIO
 import sshtunnel
 from dataclasses import dataclass, field, asdict
-from mignonFramework import JsonConfigManager, injectJson, Logger
+from mignonFramework import JsonConfigManager, injectJson, LoguruPlus, SendLog
 import paramiko
 import socket
 import select
 
 RECONNECT_DELAY_SECONDS = 5
-
+logurup = LoguruPlus()
+logurup.add_main_log_file("ssh2server")
+log = logurup.getLogger()
 
 def get_base_path() -> str:
     if getattr(sys, 'frozen', False):
@@ -43,29 +43,20 @@ app.config['SECRET_KEY'] = 'mignon-rex-is-the-best'
 socketio = SocketIO(app, async_mode='gevent')
 
 
-class SocketIOHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            print(record.getMessage())
-            log_entry = self.format(record)
-            socketio.emit('log_message', {'data': log_entry})
-            if record.levelno >= logging.WARNING:
-                socketio.emit('notification', {
-                    'type': 'warning' if record.levelno == logging.WARNING else 'error',
-                    'message': record.getMessage()
-                })
-        except Exception:
-            pass
 
 
-log = Logger(True, os.path.join(BASE_DIR, "resources", "log"))
-ui_logger = logging.getLogger('ssh_tunnel_manager_ui')
-ui_logger.setLevel(logging.INFO)
-if not ui_logger.handlers:
-    socketio_handler = SocketIOHandler()
-    formatter = logging.Formatter('%(asctime)s | %(levelname)-7s | %(message)s', '%Y-%m-%d %H:%M:%S')
-    socketio_handler.setFormatter(formatter)
-    ui_logger.addHandler(socketio_handler)
+@SendLog(LoguruPlus.INFO, format=logurup.console_format)
+def SocketIOHanderEmit(message):
+    socketio.emit('log_message', {'data': message})
+    if LoguruPlus.WARNING in message or LoguruPlus.ERROR in message:
+        socketio.emit('notification', {
+            'type': 'warning' if LoguruPlus.WARNING in message else 'error',
+            'message': str(message).split("=>")[1]
+        })
+
+
+
+
 
 manager = JsonConfigManager(CONFIG_FILE_PATH)
 
@@ -127,8 +118,8 @@ def generate_unique_id():
     return str(int(time.time() * 1000))
 
 
-# --- Mignon: 新增的反向隧道专用处理类 ---
 class ReverseTunnelThread(threading.Thread):
+
     def __init__(self, server_info, remote_info, local_info, comment):
         super().__init__(daemon=True)
         self.server_info = server_info
@@ -140,7 +131,7 @@ class ReverseTunnelThread(threading.Thread):
         self._is_really_active = False
 
     def _log(self, level, message):
-        log_func = getattr(ui_logger, level.lower(), ui_logger.info)
+        log_func = getattr(log, level.lower(), log.info)
         log_func(f"反向隧道 '{self.comment}': {message}")
 
     def stop(self):
@@ -184,11 +175,11 @@ class ReverseTunnelThread(threading.Thread):
                 transport.request_port_forward(remote_host, remote_port)
             except paramiko.SSHException as e:
                 if "TCP forwarding request denied" in str(e):
-                    print('warning', "服务器返回 'TCP forwarding request denied'，但这可能是假失败，将继续尝试运行。")
+                    log.info('warning', "服务器返回 'TCP forwarding request denied'，但这可能是假失败，将继续尝试运行。")
                 else:
                     raise
 
-            ui_logger.info(
+            log.info(
                 f"反向隧道 '{self.comment}' 连接成功。现在访问 {self.server_info['host']}:{remote_port} 将转发到 {self.local_info[0]}:{self.local_info[1]}。")
             self._is_really_active = True
 
@@ -241,7 +232,7 @@ class ReverseTunnelThread(threading.Thread):
 def attempt_connection(tunnel_id: str, server_group: ServerGroup, rule: ForwardRule, is_reconnect: bool = False):
     with tunnel_lock:
         if tunnel_id in tunnels_being_stopped:
-            ui_logger.info(f"隧道 '{rule.comment}' 的连接尝试被中止，因为它已被标记为停止。")
+            log.info(f"隧道 '{rule.comment}' 的连接尝试被中止，因为它已被标记为停止。")
             tunnels_being_stopped.discard(tunnel_id)
             return
 
@@ -256,7 +247,7 @@ def attempt_connection(tunnel_id: str, server_group: ServerGroup, rule: ForwardR
             local_info = (rule.local_host, rule.local_port)
             server = ReverseTunnelThread(server_info, remote_info, local_info, rule.comment)
         else:
-            ui_logger.info(
+            log.info(
                 f"准备创建 [正向] 隧道 '{rule.comment}': 本地 {rule.local_host}:{rule.local_port} -> 远程 {rule.remote_host}:{rule.remote_port}")
             server = sshtunnel.SSHTunnelForwarder(
                 (conn.ssh_server_host, conn.ssh_server_port),
@@ -272,10 +263,10 @@ def attempt_connection(tunnel_id: str, server_group: ServerGroup, rule: ForwardR
             active_tunnels[tunnel_id] = server
 
         if isinstance(server, sshtunnel.SSHTunnelForwarder):
-            ui_logger.info(f"隧道 '{rule.comment}' 正在尝试 {'(重)' if is_reconnect else ''}连接...")
+            log.info(f"隧道 '{rule.comment}' 正在尝试 {'(重)' if is_reconnect else ''}连接...")
             socketio.emit('notification', {'type': 'info', 'message': f"正在连接: {rule.comment}"})
             server.start()
-            ui_logger.info(
+            log.info(
                 f"正向隧道 '{rule.comment}' 连接成功。现在访问 {rule.local_host}:{rule.local_port} 将转发到 {rule.remote_host}:{rule.remote_port}。")
         else:
             server.start()
@@ -285,11 +276,11 @@ def attempt_connection(tunnel_id: str, server_group: ServerGroup, rule: ForwardR
             active_tunnels.pop(tunnel_id, None)
         error_message = str(e)
         if "Authentication failed" in error_message:
-            ui_logger.error(f"隧道 '{rule.comment}' 认证失败，请检查用户名和密码。")
+            log.error(f"隧道 '{rule.comment}' 认证失败，请检查用户名和密码。")
         elif "Could not resolve hostname" in error_message:
-            ui_logger.error(f"隧道 '{rule.comment}' 无法解析SSH主机名。")
+            log.error(f"隧道 '{rule.comment}' 无法解析SSH主机名。")
         else:
-            ui_logger.error(f"隧道 '{rule.comment}' 连接失败: {error_message}")
+            log.error(f"隧道 '{rule.comment}' 连接失败: {error_message}")
         if is_reconnect: time.sleep(RECONNECT_DELAY_SECONDS)
 
 
@@ -297,7 +288,7 @@ def start_tunnel(server_group: ServerGroup, rule: ForwardRule):
     tunnel_id = f"{server_group.id}_{rule.id}"
     with tunnel_lock:
         if tunnel_id in active_tunnels:
-            ui_logger.warning(f"隧道 '{rule.comment}' 已在管理中，不重复添加。")
+            log.warning(f"隧道 '{rule.comment}' 已在管理中，不重复添加。")
             return
         tunnels_being_stopped.discard(tunnel_id)
     connection_executor.submit(attempt_connection, tunnel_id, server_group, rule, False)
@@ -314,19 +305,19 @@ def stop_tunnel(server_group_id: str, rule_id: str):
             (f for g in app_config.server_groups if g.id == server_group_id for f in g.forwards if f.id == rule_id),
             None)
         comment = rule.comment if rule else tunnel_id
-        ui_logger.info(f"正在停止隧道 '{comment}'...")
+        log.info(f"正在停止隧道 '{comment}'...")
         try:
             server.stop()
             if isinstance(server, threading.Thread):
                 server.join(timeout=2)
-            ui_logger.info(f"隧道 '{comment}' 已安全停止。")
+            log.info(f"隧道 '{comment}' 已安全停止。")
         except Exception as e:
-            ui_logger.error(f"停止隧道 '{comment}' 时出错: {e}")
+            log.error(f"停止隧道 '{comment}' 时出错: {e}")
         finally:
             with tunnel_lock:
                 tunnels_being_stopped.discard(tunnel_id)
     else:
-        ui_logger.info(f"隧道 {tunnel_id} 未处于活动状态，但已标记为停止，连接尝试将被中止。")
+        log.info(f"隧道 {tunnel_id} 未处于活动状态，但已标记为停止，连接尝试将被中止。")
 
 
 def stop_all_tunnels_for_group(server_group_id: str):
@@ -346,7 +337,7 @@ class TunnelMonitorService(threading.Thread):
         self._stop_event.set()
 
     def run(self):
-        ui_logger.info("隧道监控服务已启动。")
+        log.info("隧道监控服务已启动。")
         while not self._stop_event.is_set():
             tunnels_to_reconnect = []
             with tunnel_lock:
@@ -360,10 +351,10 @@ class TunnelMonitorService(threading.Thread):
                         if group:
                             rule = next((f for f in group.forwards if f.id == rule_id), None)
                             if rule and group.enabled and rule.enabled:
-                                ui_logger.warning(f"监控服务发现隧道 '{rule.comment}' 已断开，准备重连。")
+                                log.warning(f"监控服务发现隧道 '{rule.comment}' 已断开，准备重连。")
                                 tunnels_to_reconnect.append((tunnel_id, group, rule))
                     except (ValueError, StopIteration):
-                        ui_logger.error(f"无法找到隧道 {tunnel_id} 的配置，将停止并移除。")
+                        log.error(f"无法找到隧道 {tunnel_id} 的配置，将停止并移除。")
                         stop_tunnel(*tunnel_id.split('_'))
             for tunnel_id, group, rule in tunnels_to_reconnect:
                 with tunnel_lock:
@@ -375,7 +366,7 @@ class TunnelMonitorService(threading.Thread):
 
 @socketio.on('connect')
 def handle_connect():
-    if not hasattr(g, 'is_connected'): print("前端 WebSocket 连接成功")
+    if not hasattr(g, 'is_connected'): log.info("前端 WebSocket 连接成功")
     g.is_connected = True
 
 
@@ -454,7 +445,7 @@ def edit_server(server_id: str) -> Union[Response, Tuple[Response, int]]:
     conn.ssh_server_host, conn.ssh_server_port, conn.ssh_username = data['ssh_host'], int(data['ssh_port']), data[
         'ssh_user']
     if data.get('ssh_pass'): conn.ssh_password = data['ssh_pass']
-    ui_logger.info(f"服务器组 '{group.name}' 配置已更新，将重启其下所有隧道。")
+    log.info(f"服务器组 '{group.name}' 配置已更新，将重启其下所有隧道。")
     restart_server_tunnels(server_id)
     return jsonify({'status': 'success', 'message': '服务器组已更新', 'group': object_to_dict(group)})
 
@@ -474,7 +465,7 @@ def toggle_server(server_id: str) -> Union[Response, Tuple[Response, int]]:
     group = next((g for g in app_config.server_groups if g.id == server_id), None)
     if not group: return jsonify({'status': 'error', 'message': '未找到服务器组'}), 404
     group.enabled = not group.enabled
-    ui_logger.info(f"服务器组 '{group.name}' 已 {'启用' if group.enabled else '禁用'}.")
+    log.info(f"服务器组 '{group.name}' 已 {'启用' if group.enabled else '禁用'}.")
     if group.enabled:
         for f in group.forwards:
             if f.enabled: start_tunnel(group, f)
@@ -488,7 +479,7 @@ def restart_server_tunnels(server_id: str) -> Union[Response, Tuple[Response, in
     group = next((g for g in app_config.server_groups if g.id == server_id), None)
     if not group: return jsonify({'status': 'error', 'message': '未找到服务器组'}), 404
     if not group.enabled: return jsonify({'status': 'error', 'message': '禁用的服务器组无法重启'}), 400
-    ui_logger.info(f"正在重启服务器组 '{group.name}' 的所有隧道...")
+    log.info(f"正在重启服务器组 '{group.name}' 的所有隧道...")
     stop_all_tunnels_for_group(server_id)
     time.sleep(1)
     for f in group.forwards:
@@ -528,7 +519,7 @@ def edit_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Response,
     rule.tunnel_type, rule.local_host, rule.local_port, rule.remote_host, rule.remote_port, rule.comment = new_tunnel_type, \
         data['local_host'], int(data['local_port']), data['remote_host'], int(data['remote_port']), data['comment']
     if needs_restart and group.enabled and rule.enabled:
-        ui_logger.info(f"隧道 '{rule.comment}' 配置已更改，正在重启。")
+        log.info(f"隧道 '{rule.comment}' 配置已更改，正在重启。")
         stop_tunnel(server_id, rule_id)
         time.sleep(0.5)
         start_tunnel(group, rule)
@@ -554,7 +545,7 @@ def toggle_tunnel(server_id: str, rule_id: str) -> Union[Response, Tuple[Respons
     rule = next((f for f in group.forwards if f.id == rule_id), None)
     if not rule: return jsonify({'status': 'error', 'message': '未找到转发规则'}), 404
     rule.enabled = not rule.enabled
-    ui_logger.info(f"隧道 '{rule.comment}' 已 {'启用' if rule.enabled else '禁用'}.")
+    log.info(f"隧道 '{rule.comment}' 已 {'启用' if rule.enabled else '禁用'}.")
     if group.enabled and rule.enabled:
         start_tunnel(group, rule)
     else:
@@ -582,7 +573,7 @@ def toggle_all_tunnels(action: str) -> Union[Response, Tuple[Response, int]]:
 
 def load_and_start_all_tunnels():
     global monitor_service
-    ui_logger.info("正在启动所有已配置且启用的隧道...")
+    log.info("正在启动所有已配置且启用的隧道...")
     for group in app_config.server_groups:
         if group.enabled:
             for rule in group.forwards:
@@ -590,14 +581,14 @@ def load_and_start_all_tunnels():
                     if rule.tunnel_type == 'reverse':
                         rule.enabled = False
                         continue
-                    start_tunnel(group, rule)  # Use the unified starter function
-    ui_logger.info("所有初始隧道任务已派发。")
+                    start_tunnel(group, rule)
+    log.info("所有初始隧道任务已派发。")
     monitor_service = TunnelMonitorService(RECONNECT_DELAY_SECONDS)
     monitor_service.start()
 
 
-def shutdown_handler(signum, frame):
-    print("\n[*] 收到退出信号，正在关闭所有隧道和监控服务...")
+def shutdown_handler():
+    log.info("\n[*] 收到退出信号，正在关闭所有隧道和监控服务...")
     if monitor_service:
         monitor_service.stop()
         monitor_service.join(timeout=3)
@@ -608,10 +599,17 @@ def shutdown_handler(signum, frame):
             group_id, rule_id = tunnel_id.split('_')
             stop_tunnel(group_id, rule_id)
         except Exception as e:
-            print(f"关闭隧道 {tunnel_id} 时发生错误: {e}")
+            log.error(f"关闭隧道 {tunnel_id} 时发生错误: {e}")
     time.sleep(2)
     connection_executor.shutdown(wait=True)
-    print("[*] 程序退出。")
+    log.info("[*] 程序退出。")
+    sys.exit(0)
+
+
+@app.route("/shutdown", methods=["GET"])
+def shutDown():
+    log.success("正在关闭....")
+    shutdown_handler()
     sys.exit(0)
 
 
@@ -624,16 +622,10 @@ def main():
     logging.getLogger('geventwebsocket.handler').disabled = True
     load_and_start_all_tunnels()
     url = f"http://{args.host}:{args.port}"
-    print(f"在浏览器中打开: {url}")
-    try:
-        webbrowser.open_new(url)
-    except Exception:
-        print("无法自动打开浏览器，请手动访问上面的地址。")
-    print("Mignon SSH Tunnel Manager 已启动。")
+    log.info(f"在浏览器中打开: {url}")
+    log.info("Mignon SSH Tunnel Manager 已启动。")
     socketio.run(app, host=args.host, port=args.port, debug=False)
-
+logurup.setUpLogger(proxy_only=['ssh_tunnel_manager_ui'])
 
 if __name__ == '__main__':
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
     main()

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mignon SSH RelayTrack 启动中</title>
+    <style>
+        /* CSS Reset and Basic Styles */
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #121212; /* 深色背景，科技感 */
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.5s;
+        }
+
+        /* Container for Centering */
+        .loading-container {
+            text-align: center;
+            padding: 30px;
+            border-radius: 12px;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            max-width: 400px;
+            width: 90%;
+            transition: all 0.5s ease-in-out;
+        }
+
+        /* Title and Status Text */
+        #status-title {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #4CAF50; /* 绿色，表示正常 */
+            font-weight: 600;
+        }
+
+        /* Loading Spinner Design */
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(135, 206, 235, 0.2); /* 浅蓝色透明边框 */
+            border-top-color: #00BCD4; /* 蓝绿色，科技感 */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            transition: border-color 0.5s;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* --- Error State Styles --- */
+        .error-message {
+            margin-top: 20px;
+            font-size: 1.1em;
+            color: #AAAAAA; /* 错误信息使用中性灰色 */
+        }
+
+        /* Retry Button */
+        #retry-btn {
+            background-color: #00BCD4;
+            color: #121212;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+
+        #retry-btn:hover {
+            background-color: #00AABF;
+            transform: translateY(-2px);
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="loading-container">
+    <h1 id="status-title">启动中，请稍候...</h1>
+
+    <div id="loading-indicator" class="spinner"></div>
+
+    <p id="error-text" class="error-message" style="display: none;"></p>
+
+    <button id="retry-btn" style="display: none;">重试</button>
+</div>
+
+<script>
+    // --- Native JavaScript & Node.js Logic (for NW.js) ---
+    (function() {
+        const TARGET_HOST = '127.0.0.1';
+        const TARGET_PORT = 2592;
+        const TARGET_URL = `http://${TARGET_HOST}:${TARGET_PORT}`;
+        const POLLING_INTERVAL_MS = 500; // 每 500ms 检查一次
+        const MAX_POLLING_ATTEMPTS = 20; // 最多检查 10 秒 (20 * 500ms)
+
+        // 尝试使用 nw.require 或全局 require
+        const nw_require = typeof require !== 'undefined' ? require : (window.nw ? window.nw.require : null);
+
+        if (!nw_require) {
+            // 非 NW.js 环境或 require 被隔离，直接报错并停止
+            setErrorState("环境错误：无法访问 Node.js API (nw.require/require)。");
+            return;
+        }
+
+        const http = nw_require('http');
+
+        const statusTitle = document.getElementById('status-title');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorText = document.getElementById('error-text');
+        const retryBtn = document.getElementById('retry-btn');
+        let pollingCount = 0;
+        let pollingTimer = null;
+
+        /**
+         * 切换到错误状态并显示提示信息
+         */
+        function setErrorState() {
+            if (pollingTimer) clearInterval(pollingTimer);
+
+            statusTitle.textContent = "启动失败";
+            // 恢复标题为默认颜色
+            statusTitle.style.color = '#E0E0E0';
+
+            errorText.textContent = "无法连接至后端服务";
+            errorText.style.display = 'block';
+            retryBtn.style.display = 'block';
+
+            // 停止动画
+            loadingIndicator.style.animation = 'none';
+        }
+
+        /**
+         * 检查后端服务是否就绪 (使用 Node.js http 模块)
+         */
+        function checkServiceReady() {
+            pollingCount++;
+
+            if (pollingCount > MAX_POLLING_ATTEMPTS) {
+                setErrorState();
+                return;
+            }
+
+            // 使用 Node.js 的 http.request 避免浏览器接管错误
+            const req = http.request({
+                host: TARGET_HOST,
+                port: TARGET_PORT,
+                path: '/', // 请求根路径即可
+                method: 'GET',
+                timeout: POLLING_INTERVAL_MS - 100 // 请求超时比轮询间隔短
+            }, (res) => {
+                if (pollingTimer) clearInterval(pollingTimer);
+
+                window.location.href = TARGET_URL;
+            });
+
+            req.on('error', (err) => {
+                // 只有在达到最大尝试次数时才显示错误
+                if (pollingCount === MAX_POLLING_ATTEMPTS) {
+                    setErrorState();
+                }
+                // 否则继续轮询
+            });
+
+            req.end();
+        }
+
+        /**
+         * 启动服务探测
+         */
+        function startProbing() {
+            pollingCount = 0;
+            // 立即检查一次，然后开始定期轮询
+            checkServiceReady();
+            pollingTimer = setInterval(checkServiceReady, POLLING_INTERVAL_MS);
+        }
+
+        // 绑定重试按钮事件
+        retryBtn.addEventListener('click', () => {
+            // 重置状态
+            statusTitle.textContent = "启动中，请稍候...";
+            statusTitle.style.color = '#4CAF50'; // 恢复初始的绿色
+            errorText.style.display = 'none';
+            retryBtn.style.display = 'none';
+            loadingIndicator.style.animation = 'spin 1s linear infinite';
+
+            // 开始探测
+            startProbing();
+        });
+
+        // 初始启动
+        startProbing();
+
+    })();
+</script>
+</body>
+</html>

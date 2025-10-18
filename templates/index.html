@@ -14,83 +14,130 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sweetalert2.min.css') }}">
     <style>
+
+            .swal2-popup.my-custom-toast {
+            border: 2px solid #ffde00 !important; /* 增加赛博朋克风格的边框 */
+            margin-top: var(--nw-title-bar-height);
+        }
         :root {
             --glow-color: rgb(0, 123, 255);
             --glow-color-red: rgb(220, 53, 69);
+            --nw-title-bar-height: 60px; /* 定义标题栏高度变量 */
         }
         html, body { height: 100%; }
         body {
             font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             transition: background-color 0.3s, color 0.3s;
+            /* 默认为 NWJS 标题栏预留空间, JS 会在非 NWJS 环境下移除它 */
+            padding-top: var(--nw-title-bar-height);
         }
         @font-face {
             font-family: 'Cyberpunk City';
-
-
             src: url('/static/css/fonts/Sdcyberpunkcitydemo-pgyBd.otf') format('opentype');
-
             font-weight: normal;
             font-style: normal;
-
             font-display: swap;
         }
 
-        /* 自定义纯黑色按钮样式 */
-.btn-dark-custom {
-
-    padding: 0.5rem 0.85rem; /* 垂直 0.375rem，水平 0.75rem */
-    background-color: #000000 !important;
-    border-color: #000000 !important;
-    color: #FFFFFF !important;
-}
-
-.btn-dark-custom:hover {
-    background-color: #333333 !important;
-    border-color: #333333 !important;
-}
-        .bg-flow-color {
-
-            background: linear-gradient(
-                135deg,
-                 #65a7f9,
-                #6cdd85,
-                #ff8b94,
-                #c091f0
-            );
-
-            background-size: 400% 400%;
-
-            color: #333333 !important;
-
-            border-radius: 0.375rem;
-
-            animation: flowGradient 2s ease infinite alternate;
-
-            background-color: transparent !important;
+        /* --- NW.js Custom Title Bar --- */
+        #nw-title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--nw-title-bar-height);
+            background-color: rgba(0,0,0,0);
+            -webkit-app-region: drag; /* 允许拖动 */
+            display: none; /* 默认隐藏, JS 会在 NW.js 环境中显示它 */
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 10px;
+            z-index: 9999;
+        }
+        .nw-title-bar-controls {
+            display: flex;
+            -webkit-app-region: no-drag; /* 控制按钮不可拖动 */
+        }
+        .nw-control-btn {
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            color: #ccc;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            border-radius: 5px;
+            margin-left: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .nw-control-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
         }
 
+        .nw-control-btn-e {
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            color: #ccc;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            border-radius: 5px;
+            margin-left: 5px;
+            font-size: 25px;
+            cursor: pointer;
+        }
+        .nw-control-btn-e:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
 
+        #nw-close-btn:hover {
+            background-color: #e81123;
+            color: #fff;
+        }
 
-.btn-custom-add {
-    background-color: #a77aff !important;
-    border-color: #a77aff !important;
-    color: #fff !important;
-}
+        /* 所有可交互元素都应该设置为 no-drag */
+        .navbar, .btn, .form-control, .form-check-input, .bi, a, [data-bs-toggle], [style*="cursor: pointer"] {
+            -webkit-app-region: no-drag;
+        }
+        .sticky-top {
+            /* 在 NW.js 环境下，导航栏需要向下移动以避开自定义标题栏 */
+            top: var(--nw-title-bar-height);
+        }
 
-.btn-custom-add:hover {
-    background-color: #5d36a5 !important;
-    border-color: #5d36a5 !important;
-}
+        /* 自定义纯黑色按钮样式 */
+        .btn-dark-custom {
+            padding: 0.5rem 0.85rem;
+            background-color: #000000 !important;
+            border-color: #000000 !important;
+            color: #FFFFFF !important;
+        }
+        .btn-dark-custom:hover {
+            background-color: #333333 !important;
+            border-color: #333333 !important;
+        }
+        .bg-flow-color {
+            background: linear-gradient(135deg, #65a7f9, #6cdd85, #ff8b94, #c091f0);
+            background-size: 400% 400%;
+            color: #333333 !important;
+            border-radius: 0.375rem;
+            animation: flowGradient 2s ease infinite alternate;
+            background-color: transparent !important;
+        }
+        .btn-custom-add {
+            background-color: #a77aff !important;
+            border-color: #a77aff !important;
+            color: #fff !important;
+        }
+        .btn-custom-add:hover {
+            background-color: #5d36a5 !important;
+            border-color: #5d36a5 !important;
+        }
         @keyframes flowGradient {
-            0% {
-                background-position: 0 50%;
-            }
-            50% {
-                background-position: 100% 50%;
-            }
-            100% {
-                background-position: 0 50%;
-            }
+            0% { background-position: 0 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0 50%; }
         }
         .navbar {
             backdrop-filter: blur(10px);
@@ -105,130 +152,35 @@
             transform: translateY(-5px);
             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 0 20px var(--glow-color);
         }
-
-.glitch-container {
-    position: relative;
-    display: inline-block;
-}
-.cool-text {
-    font-family: 'Cyberpunk City', sans-serif;
-    font-weight: 300;
-    font-size: 1.8rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    position: relative;
-    z-index: 1;
-
-    color: #ffde00;
-text-shadow:
-    0 0 5px #ffde00,
-    0 0 10px #ff4500,
-
-    2px 2px 0 #ff0077,
-    -2px -2px 0 #00ffff;
-}
-
-.glitch-block {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 2;
-}
-
-.glitch-block::before {
-    content: '';
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    top: 1px;
-    left: 1px;
-}
-
-
-/* 1. 淡蓝色按钮 (btn-info) 悬停效果 */
-.btn-info:hover {
-    /* 默认的 btn-info 颜色是 #0dcaf0 (青色/亮蓝)。悬停时稍微变暗。 */
-    background-color: #0c9abf !important;
-    border-color: #0c9abf !important;
-}
-
-/* 2. 警告色按钮 (btn-warning - 黄色) 悬停效果 */
-.btn-warning:hover {
-    /* 默认的 btn-warning 颜色是 #ffc107。悬停时稍微变暗。 */
-    background-color: #e0a800 !important;
-    border-color: #e0a800 !important;
-}
-
-/* 3. 危险色按钮 (btn-danger - 红色) 悬停效果 */
-.btn-danger:hover {
-    /* 默认的 btn-danger 颜色是 #dc3545。悬停时稍微变暗。 */
-    background-color: #c82333 !important;
-    border-color: #c82333 !important;
-}
-
-.glitch-container .glitch-block:nth-child(2),
-.glitch-container .glitch-block:nth-child(4) {
-    background-image: linear-gradient(to bottom right,#f1d40e, #b4c4af, #c95f5f);
-}
-
-.glitch-container .glitch-block:nth-child(2)::before,
-.glitch-container .glitch-block:nth-child(4)::before {
-    background-image: linear-gradient(to bottom right, #708090,#e8e8e8, #b4c4af, #ec0000, #5a6874); /* 可以选择更暗的颜色作为渐变终点 */
-}
-
-.glitch-container .glitch-block:nth-child(3),
-.glitch-container .glitch-block:nth-child(5) {
-    background-image: linear-gradient(to bottom right,#f1d40e, #7c9ec0, #ffef97, #708090);
-}
-
-.glitch-container .glitch-block:nth-child(3)::before,
-.glitch-container .glitch-block:nth-child(5)::before {
-
-    background-image: linear-gradient(to bottom right, #95a17a, #beff00, #95a17a, #ff8000, #95a17a, #ffea00); /* 可以选择更深的颜色作为渐变终点 */
-}
-
-
-.glitch-container .glitch-block:nth-child(2) { animation: glitch-flicker-1 3.5s infinite steps(1, end); }
-.glitch-container .glitch-block:nth-child(3) { animation: glitch-flicker-2 2.8s infinite steps(1, end); }
-.glitch-container .glitch-block:nth-child(4) { animation: glitch-flicker-3 4.2s infinite steps(1, end); }
-.glitch-container .glitch-block:nth-child(5) { animation: glitch-flicker-4 3.1s infinite steps(1, end); }
-
-
-@keyframes glitch-flicker-1 {
-    0%, 100% { opacity: 0; }
-    10%, 12% { opacity: 1; top: 30%; left: 25%; width: 30%; height: 3px; }
-    13%, 100% { opacity: 0; }
-
-    60%, 63% { opacity: 1; top: 43%; left: 45%; width: 15%; height: 2px; }
-    64%, 100% { opacity: 0; }
-}
-
-@keyframes glitch-flicker-2 {
-    0%, 100% { opacity: 0; }
-    5%, 7% { opacity: 1; top: 35%; left: 70%; width: 25%; height: 4px; }
-    8%, 100% { opacity: 0; }
-
-    70%, 73% { opacity: 1; top: 25%; left: 5%; width: 6%; height: 2px; }
-    74%, 100% { opacity: 0; }
-}
-
-@keyframes glitch-flicker-3 {
-    0%, 100% { opacity: 0; }
-    20%, 23% { opacity: 1; top: 56%; left: 30%; width: 33%; height: 2px; }
-    24%, 100% { opacity: 0; }
-
-    50%, 53% { opacity: 1; top: 20%; left: 60%; width: 7%; height: 3px; }
-    54%, 100% { opacity: 0; }
-}
-
-@keyframes glitch-flicker-4 {
-    0%, 100% { opacity: 0; }
-    15%, 17% { opacity: 1; top: 45%; left: -5%; width: 22%; height: 4px; }
-    18%, 100% { opacity: 0; }
-
-    80%, 83% { opacity: 1; top: 60%; left: 85%; width: 10%; height: 3px; }
-    84%, 100% { opacity: 0; }
-}
+        .glitch-container { position: relative; display: inline-block; }
+        .cool-text {
+            font-family: 'Cyberpunk City', sans-serif;
+            font-weight: 300;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            position: relative;
+            z-index: 1;
+            color: #ffde00;
+            text-shadow: 0 0 5px #ffde00, 0 0 10px #ff4500, 2px 2px 0 #ff0077, -2px -2px 0 #00ffff;
+        }
+        .glitch-block { position: absolute; opacity: 0; pointer-events: none; z-index: 2; }
+        .glitch-block::before { content: ''; position: absolute; width: 100%; height: 100%; top: 1px; left: 1px; }
+        .btn-info:hover { background-color: #0c9abf !important; border-color: #0c9abf !important; }
+        .btn-warning:hover { background-color: #e0a800 !important; border-color: #e0a800 !important; }
+        .btn-danger:hover { background-color: #c82333 !important; border-color: #c82333 !important; }
+        .glitch-container .glitch-block:nth-child(2), .glitch-container .glitch-block:nth-child(4) { background-image: linear-gradient(to bottom right, #f1d40e, #b4c4af, #c95f5f); }
+        .glitch-container .glitch-block:nth-child(2)::before, .glitch-container .glitch-block:nth-child(4)::before { background-image: linear-gradient(to bottom right, #708090, #e8e8e8, #b4c4af, #ec0000, #5a6874); }
+        .glitch-container .glitch-block:nth-child(3), .glitch-container .glitch-block:nth-child(5) { background-image: linear-gradient(to bottom right, #f1d40e, #7c9ec0, #ffef97, #708090); }
+        .glitch-container .glitch-block:nth-child(3)::before, .glitch-container .glitch-block:nth-child(5)::before { background-image: linear-gradient(to bottom right, #95a17a, #beff00, #95a17a, #ff8000, #95a17a, #ffea00); }
+        .glitch-container .glitch-block:nth-child(2) { animation: glitch-flicker-1 3.5s infinite steps(1, end); }
+        .glitch-container .glitch-block:nth-child(3) { animation: glitch-flicker-2 2.8s infinite steps(1, end); }
+        .glitch-container .glitch-block:nth-child(4) { animation: glitch-flicker-3 4.2s infinite steps(1, end); }
+        .glitch-container .glitch-block:nth-child(5) { animation: glitch-flicker-4 3.1s infinite steps(1, end); }
+        @keyframes glitch-flicker-1 { 0%, 100% { opacity: 0; } 10%, 12% { opacity: 1; top: 30%; left: 25%; width: 30%; height: 3px; } 13%, 100% { opacity: 0; } 60%, 63% { opacity: 1; top: 43%; left: 45%; width: 15%; height: 2px; } 64%, 100% { opacity: 0; } }
+        @keyframes glitch-flicker-2 { 0%, 100% { opacity: 0; } 5%, 7% { opacity: 1; top: 35%; left: 70%; width: 25%; height: 4px; } 8%, 100% { opacity: 0; } 70%, 73% { opacity: 1; top: 25%; left: 5%; width: 6%; height: 2px; } 74%, 100% { opacity: 0; } }
+        @keyframes glitch-flicker-3 { 0%, 100% { opacity: 0; } 20%, 23% { opacity: 1; top: 56%; left: 30%; width: 33%; height: 2px; } 24%, 100% { opacity: 0; } 50%, 53% { opacity: 1; top: 20%; left: 60%; width: 7%; height: 3px; } 54%, 100% { opacity: 0; } }
+        @keyframes glitch-flicker-4 { 0%, 100% { opacity: 0; } 15%, 17% { opacity: 1; top: 45%; left: -5%; width: 22%; height: 4px; } 18%, 100% { opacity: 0; } 80%, 83% { opacity: 1; top: 60%; left: 85%; width: 10%; height: 3px; } 84%, 100% { opacity: 0; } }
         .action-icons { display: flex; align-items: center; gap: 12px; }
         .form-check-input { margin-top: 0; }
         .footer { padding: 2rem 0; margin-top: 2rem; border-top: 1px solid var(--bs-border-color); }
@@ -240,10 +192,8 @@ text-shadow:
         .control-panel .btn-group .btn:hover { transform: scale(1.05); box-shadow: 0 0 15px rgba(var(--bs-primary-rgb), 0.5); }
         .control-panel .form-switch { padding: 0.375rem 0.75rem; border: 1px solid var(--bs-border-color); border-radius: 0.5rem; background-color: var(--bs-tertiary-bg); }
         .navbar-nav .nav-item { margin-bottom: .5rem; }
-
         .copy-address .bi-clipboard { opacity: 0.5; transition: opacity 0.2s; }
         .copy-address:hover .bi-clipboard { opacity: 1; }
-
         @media (min-width: 992px) {
             .navbar-nav .nav-item { margin-bottom: 0; }
             .navbar-collapse .d-flex.flex-grow-1 { max-width: 500px; }
@@ -251,7 +201,17 @@ text-shadow:
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+
+<!-- NW.js Custom Title Bar -->
+<div id="nw-title-bar">
+    <div class="nw-title-bar-controls">
+        <div id="nw-minimize-btn" class="nw-control-btn-e" title="最小化"><i class="bi bi-dash"></i></div>
+        <div id="nw-maximize-btn" class="nw-control-btn" title="最大化"><i class="bi bi-square"></i></div>
+        <div id="nw-close-btn" class="nw-control-btn-e" title="关闭"><i class="bi bi-x"></i></div>
+    </div>
+</div>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
     <a class="navbar-brand">
     <img src="/favicon.ico" alt="Mignon Logo" style="height: 30px; margin-right: 10px; margin-bottom: 10px;">
@@ -274,7 +234,7 @@ text-shadow:
             </form>
             <ul class="navbar-nav ms-auto align-items-center flex-row flex-wrap justify-content-center">
                 <li class="nav-item mx-1">
-    <a href="/logs" class="btn btn-dark-custom btn-icon-square rounded-pill" title="查看全屏日志" target="_blank"><i class="bi bi-terminal"></i></a>
+    <a href="/logs" class="btn btn-dark-custom btn-icon-square rounded-pill" title="查看全屏日志"><i class="bi bi-terminal"></i></a>
 </li>
                 <li class="nav-item mx-1">
                     <button id="add-server-btn" class="btn btn-custom-add rounded-pill " title="添加服务器组"><i class="bi bi-plus-lg"></i></button>
@@ -372,6 +332,97 @@ text-shadow:
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
 <script>
+    // --- Robust NW.js Logic (Native JS) ---
+    // This self-contained script runs to set up the window controls and layout.
+   (function() {
+        // 改进的 NW.js 环境检测：优先检查全局的 nw 对象
+        const isNwjs = (typeof require !== 'undefined') || (typeof window.nw !== 'undefined');
+        // 注意：这部分代码需要在 'http://127.0.0.1:2592' 提供的页面中执行
+
+        /**
+         * 设置 NW.js 系统托盘图标及其右键菜单。
+         * 解决了 gui.MenuItem 不是构造函数的兼容性问题。
+         * * @param {Function} nw_require - 可用的 Node/NW.js require 函数。
+         * @param {string} TARGET_URL - 后端服务的基准 URL (e.g., 'http://127.0.0.1:2592')。
+         */
+        function setupNwjsWindow() {
+            try {
+                // 使用 window.nw.require 或全局 require 来获取 nw.gui
+                const nw_require = typeof require !== 'undefined' ? require : (window.nw ? window.nw.require : null);
+
+                if (!nw_require) {
+                    throw new Error("NW.js require API not accessible.");
+                }
+
+                const gui = nw_require('nw.gui'); // 使用获取到的 require 函数
+                const win = gui.Window.get();
+
+                const titleBar = document.getElementById('nw-title-bar');
+                const minimizeBtn = document.getElementById('nw-minimize-btn');
+                const maximizeBtn = document.getElementById('nw-maximize-btn');
+                const closeBtn = document.getElementById('nw-close-btn');
+
+                if (!titleBar || !minimizeBtn || !maximizeBtn || !closeBtn) {
+                    console.error('NW.js title bar elements not found!');
+                    return;
+                }
+
+                titleBar.style.display = 'flex'; // Show the title bar
+
+                let isMaximized = win.state === 'maximized';
+
+                // 初始化最大化图标
+                if (isMaximized) {
+                    maximizeBtn.innerHTML = '<i class="bi bi-files"></i>';
+                    maximizeBtn.title = '恢复';
+                }
+
+                maximizeBtn.addEventListener('click', () => {
+                    if (isMaximized) { win.restore(); } else { win.maximize(); }
+                });
+                minimizeBtn.addEventListener('click', () => win.minimize());
+                closeBtn.addEventListener('click', () => win.hide());
+
+                win.on('maximize', () => {
+                    isMaximized = true;
+                    maximizeBtn.innerHTML = '<i class="bi bi-files"></i>'; // 恢复图标
+                    maximizeBtn.title = '恢复';
+                });
+                win.on('restore', () => {
+                    isMaximized = false;
+                    maximizeBtn.innerHTML = '<i class="bi bi-square"></i>'; // 最大化图标
+                    maximizeBtn.title = '最大化';
+                });
+            } catch (e) {
+                console.error('Failed to initialize NW.js window controls:', e);
+                // Hide title bar and reset padding on error ( fallback to browser mode )
+                document.getElementById('nw-title-bar').style.display = 'none';
+                document.body.style.paddingTop = '0';
+                const stickyNav = document.querySelector('.sticky-top');
+                if (stickyNav) stickyNav.style.top = '0';
+            }
+        }
+
+        function setupBrowserWindow() {
+            // Not in NW.js, remove the space reserved for the title bar.
+            document.body.style.paddingTop = '0';
+            const stickyNav = document.querySelector('.sticky-top');
+            if (stickyNav) {
+                stickyNav.style.top = '0';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (isNwjs) {
+                setupNwjsWindow();
+            } else {
+                setupBrowserWindow();
+            }
+        });
+    })();
+
+
+    // --- Original Application Logic (jQuery) ---
     $(document).ready(function() {
         function requestNotificationPermission() {
             if ("Notification" in window && Notification.permission !== "denied") {
@@ -381,7 +432,11 @@ text-shadow:
         requestNotificationPermission();
 
         const showToast = (icon, title) => {
-            Swal.fire({ toast: true, position: 'top-end', icon: icon, title: title, showConfirmButton: false, timer: 2000 });
+            Swal.fire({ toast: true, position: 'top-end', icon: icon, title: title, showConfirmButton: false,
+            customClass: {
+            popup: 'my-custom-toast' // 定义一个自定义类名
+        },
+            timer: 2000 });
         };
 
         function showNotification(type, body) {
@@ -702,7 +757,6 @@ text-shadow:
         });
         $('#server-list').on('click', '.add-tunnel-btn', function() { handleTunnelForm(false, $(this).data('id')); });
 
-        // MODIFIED LOGIC HERE
         $('#server-list').on('click', '.edit-tunnel-btn', function() {
             const serverId = $(this).data('server-id'), ruleId = $(this).data('id');
             apiCall(`/api/tunnels/${serverId}/${ruleId}`, 'GET', null, (data) => {
@@ -764,4 +818,3 @@ text-shadow:
 </script>
 </body>
 </html>
-

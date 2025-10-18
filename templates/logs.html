@@ -7,12 +7,78 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
     <style>
+        :root {
+            --nw-title-bar-height: 60px; /* 定义标题栏高度变量 */
+        }
         html, body {
             height: 100%;
             overflow: hidden;
             font-family: 'Segoe UI',-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
         }
-        body { display: flex; flex-direction: column; }
+        body {
+            display: flex;
+            flex-direction: column;
+            /* 默认为 NWJS 标题栏预留空间, JS 会在非 NWJS 环境下移除它 */
+            padding-top: var(--nw-title-bar-height);
+        }
+
+        #nw-title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--nw-title-bar-height);
+            background-color: rgba(0,0,0,0);
+            -webkit-app-region: drag; /* 允许拖动 */
+            display: none; /* 默认隐藏, JS 会在 NW.js 环境中显示它 */
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 10px;
+            z-index: 9999;
+        }
+        .nw-title-bar-controls {
+            display: flex;
+            -webkit-app-region: no-drag; /* 控制按钮不可拖动 */
+        }
+        .nw-control-btn {
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            color: #ccc;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            border-radius: 5px;
+            margin-left: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .nw-control-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        .nw-control-btn-e {
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            color: #ccc;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            border-radius: 5px;
+            margin-left: 5px;
+            font-size: 25px;
+            cursor: pointer;
+        }
+        .nw-control-btn-e:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        /* 可交互元素设置为 no-drag */
+        .navbar, .btn, .form-check-input, a {
+            -webkit-app-region: no-drag;
+        }
+
         .log-container {
             flex-grow: 1;
             font-family: 'Consolas', 'Monaco', monospace;
@@ -35,10 +101,20 @@
     </style>
 </head>
 <body>
+<!-- NW.js Custom Title Bar -->
+<div id="nw-title-bar">
+    <div id="nw-title-bar-text">实时日志中心</div>
+    <div class="nw-title-bar-controls">
+        <div id="nw-minimize-btn" class="nw-control-btn-e" title="最小化"><i class="bi bi-dash"></i></div>
+        <div id="nw-maximize-btn" class="nw-control-btn" title="最大化"><i class="bi bi-square"></i></div>
+        <div id="nw-close-btn" class="nw-control-btn-e" title="关闭"><i class="bi bi-x"></i></div>
+    </div>
+</div>
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="/"><i class="bi bi-arrow-left-circle-fill"></i> 返回主页</a>
-        <h5 class="navbar-text text-white mb-0">实时日志中心</h5>
+        <h5 id="navbar-title-text" class="navbar-text text-white mb-0">实时日志中心</h5>
         <div>
             <button id="clear-log-btn" class="btn btn-sm btn-danger me-2">清空日志</button>
             <div class="form-check form-switch d-inline-block">
@@ -52,49 +128,113 @@
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const logContent = document.getElementById('log-content');
+    // --- Robust NW.js Logic (Native JS) ---
+    (function() {
+        const isNwjs = typeof require !== 'undefined';
 
-        // --- WebSocket with Reconnection ---
-        const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
+        function setupNwjsWindow() {
+            try {
+                const gui = require('nw.gui');
+                const win = gui.Window.get();
 
-        const addLogLine = (message, level) => {
-            const logLine = document.createElement('div');
-            logLine.className = `log-line-${level}`;
-            logLine.textContent = message;
-            logContent.appendChild(logLine);
-            logContent.scrollTop = logContent.scrollHeight;
+                const titleBar = document.getElementById('nw-title-bar');
+                const minimizeBtn = document.getElementById('nw-minimize-btn');
+                const maximizeBtn = document.getElementById('nw-maximize-btn');
+                const closeBtn = document.getElementById('nw-close-btn');
+                const navbarTitle = document.getElementById('navbar-title-text');
+
+                if (!titleBar || !minimizeBtn || !maximizeBtn || !closeBtn) {
+                    console.error('NW.js title bar elements not found!');
+                    return;
+                }
+
+                // Hide original title and show custom one
+                if(navbarTitle) navbarTitle.style.display = 'none';
+                titleBar.style.display = 'flex';
+
+                let isMaximized = false;
+                maximizeBtn.addEventListener('click', () => {
+                    if (isMaximized) { win.restore(); } else { win.maximize(); }
+                });
+                minimizeBtn.addEventListener('click', () => win.minimize());
+                closeBtn.addEventListener('click', () => win.hide());
+
+                win.on('maximize', () => {
+                    isMaximized = true;
+                    maximizeBtn.innerHTML = '<i class="bi bi-files"></i>';
+                    maximizeBtn.title = '恢复';
+                });
+                win.on('restore', () => {
+                    isMaximized = false;
+                    maximizeBtn.innerHTML = '<i class="bi bi-square"></i>';
+                    maximizeBtn.title = '最大化';
+                });
+
+            } catch (e) {
+                console.error('Failed to initialize NW.js window controls:', e);
+                document.getElementById('nw-title-bar').style.display = 'none';
+                document.body.style.paddingTop = '0';
+            }
         }
 
-        socket.on('connect', () => {
-            addLogLine('成功连接到日志服务器...', 'INFO');
-        });
-        socket.on('disconnect', () => {
-            addLogLine('与服务器断开连接，正在尝试重连...', 'ERROR');
-        });
-        socket.on('log_message', (msg) => {
-            const logLevel = msg.data.split('|')[1].trim();
-            addLogLine(msg.data, logLevel);
-        });
+        function setupBrowserWindow() {
+            document.body.style.paddingTop = '0';
+        }
 
-        // --- Theme ---
-        const themeToggle = document.getElementById('theme-toggle');
-        const storedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-bs-theme', storedTheme);
-        themeToggle.checked = storedTheme === 'light';
+        document.addEventListener('DOMContentLoaded', function() {
+            if (isNwjs) {
+                setupNwjsWindow();
+            } else {
+                setupBrowserWindow();
+            }
 
-        themeToggle.addEventListener('change', function() {
-            const theme = this.checked ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-bs-theme', theme);
-            localStorage.setItem('theme', theme);
-        });
+            // --- Original Application Logic ---
+            const logContent = document.getElementById('log-content');
+            const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
 
-        // --- Clear Button ---
-        document.getElementById('clear-log-btn').addEventListener('click', () => {
-            logContent.innerHTML = '';
+            const addLogLine = (message, level) => {
+                const logLine = document.createElement('div');
+                logLine.className = `log-line-${level}`;
+                logLine.textContent = message;
+                logContent.appendChild(logLine);
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+
+            socket.on('connect', () => {
+                addLogLine('成功连接到日志服务器...', 'INFO');
+            });
+            socket.on('disconnect', () => {
+                addLogLine('与服务器断开连接，正在尝试重连...', 'ERROR');
+            });
+            socket.on('log_message', (msg) => {
+                const match = msg.data.match(/\[(.*?)\]/);
+
+                let logLevel = 'UNKNOWN'; // 默认值
+
+                if (match && match[1]) {
+                    // match[1] 是正则表达式捕获组（即方括号内的内容）
+                    logLevel = match[1].trim();
+                }
+
+                addLogLine(msg.data, logLevel);
+            });
+
+            const themeToggle = document.getElementById('theme-toggle');
+            const storedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-bs-theme', storedTheme);
+            themeToggle.checked = storedTheme === 'light';
+
+            themeToggle.addEventListener('change', function() {
+                const theme = this.checked ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                localStorage.setItem('theme', theme);
+            });
+
+            document.getElementById('clear-log-btn').addEventListener('click', () => {
+                logContent.innerHTML = '';
+            });
         });
-    });
+    })();
 </script>
 </body>
 </html>
-
